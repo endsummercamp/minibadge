@@ -96,9 +96,9 @@
         "padstack": "warning",
         "pth_inside_courtyard": "ignore",
         "shorting_items": "error",
-        "silk_edge_clearance": "warning",
-        "silk_over_copper": "warning",
-        "silk_overlap": "warning",
+        "silk_edge_clearance": "ignore",
+        "silk_over_copper": "ignore",
+        "silk_overlap": "ignore",
         "skew_out_of_range": "error",
         "solder_mask_bridge": "error",
         "starved_thermal": "error",
@@ -179,7 +179,6 @@
       ],
       "track_widths": [
         0.0,
-        0.1,
         0.3,
         0.5
       ],
@@ -636,6 +635,10 @@
     [
       "797b060f-d492-4a6d-bdf5-02ef6056d694",
       "usb"
+    ],
+    [
+      "6063304d-0f22-439d-adec-92c299de2d21",
+      "rp2040"
     ]
   ],
   "text_variables": {}
