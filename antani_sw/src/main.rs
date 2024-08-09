@@ -1,7 +1,6 @@
 #![no_std]
 #![no_main]
 
-
 use defmt::*;
 use defmt_rtt as _;
 use panic_probe as _;
@@ -118,7 +117,6 @@ fn main() -> ! {
     ws.write(core::iter::repeat(black).take(400)).unwrap();
 
     loop {
-
         mtrx.set_all(red);
         ws.write(mtrx.blit()).unwrap();
 
@@ -133,6 +131,5 @@ fn main() -> ! {
         ws.write(mtrx.blit()).unwrap();
 
         delay.delay_ms(150);
-
     }
 }
