@@ -3,6 +3,7 @@
 
 use defmt::*;
 use defmt_rtt as _;
+use embedded_hal::digital::StatefulOutputPin;
 use panic_probe as _;
 
 #[link_section = ".boot2"]
@@ -93,6 +94,12 @@ fn main() -> ! {
 
     let (mut pio, sm0, _, _, _) = pac.PIO0.split(&mut pac.RESETS);
 
+    let mut ir_blaster = pins.gpio11.into_push_pull_output();
+    #[allow(unused_variables)]
+    let ir_sensor = pins.gpio10.as_input();
+    #[allow(unused_variables)]
+    let user_button = pins.gpio14.into_pull_up_input();
+
     let mut ws = Ws2812::new(
         pins.gpio19.into_function(),
         &mut pio,
@@ -131,5 +138,7 @@ fn main() -> ! {
         ws.write(mtrx.blit()).unwrap();
 
         delay.delay_ms(150);
+
+        ir_blaster.toggle().unwrap();
     }
 }
