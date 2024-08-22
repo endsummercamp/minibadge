@@ -26,6 +26,7 @@ smart-leds-trait = "0.2.1"
 # If you're not going to use a Board Support Package you'll need these:
 rp2040-hal = { version="0.10", features=["rt", "critical-section-impl"] }
 rp2040-boot2 = "0.2"
+infrared = "0.14.2"
 
 # cargo build/run
 [profile.dev]
