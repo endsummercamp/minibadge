@@ -2353,7 +2353,7 @@
 				)
 			)
 		)
-		(property "Footprint" "LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm"
+		(property "Footprint" "lib:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm_handsolder"
 			(at 38.1 185.42 0)
 			(effects
 				(font
@@ -2658,7 +2658,7 @@
 				)
 			)
 		)
-		(property "Footprint" "LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm"
+		(property "Footprint" "lib:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm_handsolder"
 			(at 53.34 185.42 0)
 			(effects
 				(font
@@ -4276,7 +4276,7 @@
 				)
 			)
 		)
-		(property "Footprint" "LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm"
+		(property "Footprint" "lib:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm_handsolder"
 			(at 129.54 185.42 0)
 			(effects
 				(font
@@ -5793,7 +5793,7 @@
 				)
 			)
 		)
-		(property "Footprint" "LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm"
+		(property "Footprint" "lib:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm_handsolder"
 			(at 114.3 185.42 0)
 			(effects
 				(font
@@ -6145,7 +6145,7 @@
 				)
 			)
 		)
-		(property "Footprint" "LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm"
+		(property "Footprint" "lib:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm_handsolder"
 			(at 160.02 185.42 0)
 			(effects
 				(font
@@ -6220,7 +6220,7 @@
 				)
 			)
 		)
-		(property "Footprint" "LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm"
+		(property "Footprint" "lib:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm_handsolder"
 			(at 68.58 185.42 0)
 			(effects
 				(font
@@ -6437,7 +6437,7 @@
 				)
 			)
 		)
-		(property "Footprint" "LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm"
+		(property "Footprint" "lib:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm_handsolder"
 			(at 144.78 185.42 0)
 			(effects
 				(font
@@ -7527,7 +7527,7 @@
 				)
 			)
 		)
-		(property "Footprint" "LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm"
+		(property "Footprint" "lib:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm_handsolder"
 			(at 99.06 185.42 0)
 			(effects
 				(font
@@ -7965,7 +7965,7 @@
 				)
 			)
 		)
-		(property "Footprint" "LED_SMD:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm"
+		(property "Footprint" "lib:LED_WS2812B_PLCC4_5.0x5.0mm_P3.2mm_handsolder"
 			(at 83.82 185.42 0)
 			(effects
 				(font
