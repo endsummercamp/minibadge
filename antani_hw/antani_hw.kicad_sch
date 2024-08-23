@@ -2108,6 +2108,17 @@
 		)
 		(uuid "070f31cd-6ecf-460b-836d-7565e9a34486")
 	)
+	(label "LED_WHITE"
+		(at 266.7 120.65 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right bottom)
+		)
+		(uuid "0e4e36d1-9d4b-46a7-8f67-4b134ada759f")
+	)
 	(label "LED_DOUT"
 		(at 196.85 90.17 0)
 		(fields_autoplaced yes)
@@ -2129,6 +2140,17 @@
 			(justify right bottom)
 		)
 		(uuid "2557a3c2-2d2b-4a40-adae-76e7ff2e5f9a")
+	)
+	(label "LED_WHITE"
+		(at 196.85 92.71 0)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify left bottom)
+		)
+		(uuid "44eda19f-8e91-4ea1-95e4-ce46dfc0ef81")
 	)
 	(label "IR_SENS"
 		(at 231.14 78.74 180)
@@ -2957,6 +2979,73 @@
 		)
 	)
 	(symbol
+		(lib_id "power:GND")
+		(at 266.7 143.51 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "2ba414dc-9caa-4072-9e7e-1d434c8508f8")
+		(property "Reference" "#PWR022"
+			(at 266.7 149.86 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Value" "GND"
+			(at 266.7001 147.32 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" ""
+			(at 266.7 143.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 266.7 143.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 266.7 143.51 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "c1cacc78-170f-4249-90e0-f25b57ee751f")
+		)
+		(instances
+			(project "antani_hw"
+				(path "/10447bd3-961b-4c5e-922b-25c46da93efa"
+					(reference "#PWR022")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "Connector:TestPoint")
 		(at 196.85 100.33 270)
 		(unit 1)
@@ -3097,6 +3186,82 @@
 			(project ""
 				(path "/10447bd3-961b-4c5e-922b-25c46da93efa"
 					(reference "U2")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 266.7 124.46 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "3288e10d-9a91-4043-a63c-48759a3ef9a5")
+		(property "Reference" "R3"
+			(at 264.16 124.46 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "27"
+			(at 266.7 124.46 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+			(at 264.922 124.46 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 266.7 124.46 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 266.7 124.46 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C25156"
+			(at 266.7 124.46 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "61eb650a-5f71-40b6-8f12-42bdb891de37")
+		)
+		(pin "2"
+			(uuid "636b1ecc-1624-4e8d-9530-2465cefac656")
+		)
+		(instances
+			(project "antani_hw"
+				(path "/10447bd3-961b-4c5e-922b-25c46da93efa"
+					(reference "R3")
 					(unit 1)
 				)
 			)
@@ -3322,6 +3487,82 @@
 			(project ""
 				(path "/10447bd3-961b-4c5e-922b-25c46da93efa"
 					(reference "J3")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:R")
+		(at 266.7 132.08 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "3bfdf974-8b2e-4d8b-a937-a1602dd99a31")
+		(property "Reference" "R4"
+			(at 264.16 132.08 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "27"
+			(at 266.7 132.08 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "Resistor_SMD:R_0402_1005Metric"
+			(at 264.922 132.08 90)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 266.7 132.08 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Resistor"
+			(at 266.7 132.08 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C25156"
+			(at 266.7 132.08 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "1"
+			(uuid "b87f47c0-f688-4fe2-a9c5-6ff2a5693b58")
+		)
+		(pin "2"
+			(uuid "bd5bf069-9961-4447-858e-2957515c1590")
+		)
+		(instances
+			(project "antani_hw"
+				(path "/10447bd3-961b-4c5e-922b-25c46da93efa"
+					(reference "R4")
 					(unit 1)
 				)
 			)
@@ -5248,6 +5489,82 @@
 			(project "antani_hw"
 				(path "/10447bd3-961b-4c5e-922b-25c46da93efa"
 					(reference "#PWR056")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Device:LED")
+		(at 266.7 139.7 90)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(uuid "82c2d00c-29a2-45f7-95e5-659d2efeceae")
+		(property "Reference" "D11"
+			(at 261.62 139.7 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "LED"
+			(at 264.16 139.7 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "LED_SMD:LED_0603_1608Metric"
+			(at 266.7 139.7 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" "~"
+			(at 266.7 139.7 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" "Light emitting diode"
+			(at 266.7 139.7 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C2290"
+			(at 266.7 139.7 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(pin "2"
+			(uuid "44960a6a-55ed-4d25-ac88-7ea47f29b0d6")
+		)
+		(pin "1"
+			(uuid "bc4e412b-0589-4aaf-87b5-b2bfab1abc19")
+		)
+		(instances
+			(project "antani_hw"
+				(path "/10447bd3-961b-4c5e-922b-25c46da93efa"
+					(reference "D11")
 					(unit 1)
 				)
 			)
