@@ -10,6 +10,8 @@ use embedded_hal::digital::StatefulOutputPin;
 use infrared::{protocol::NecDebug, Receiver};
 use panic_probe as _;
 
+use num_traits::real::Real;
+
 #[link_section = ".boot2"]
 #[used]
 pub static BOOT_LOADER: [u8; 256] = rp2040_boot2::BOOT_LOADER_W25Q080;
@@ -31,6 +33,20 @@ use rp2040_hal::gpio::Interrupt::EdgeLow;
 const LED_MATRIX_WIDTH: usize = 3;
 const LED_MATRIX_HEIGHT: usize = 3;
 const LED_MATRIX_SIZE: usize = LED_MATRIX_WIDTH * LED_MATRIX_HEIGHT;
+
+struct LedPattern {
+    pattern: u16,
+}
+
+impl LedPattern {
+
+    const fn from(pattern: u16) -> Self {
+        Self { pattern }
+    }
+}
+
+const GLIDER_PATTERN: LedPattern = LedPattern::from(0b010001111);
+
 struct LedMatrix {
     framebuffer: [(u8, u8, u8); LED_MATRIX_SIZE],
     gain: f32,
@@ -69,6 +85,47 @@ impl LedMatrix {
             (r, g, b).into()
         })
     }
+
+    fn render(&mut self, pattern: LedPattern, colour: RGB8) {
+        // this garbage is to rotate the pattern so the usb port is at the top
+        // i hope the compiler optimizes this out
+
+        if pattern.pattern & 0b100000000 != 0 {
+            self.set_pixel(2, 0, colour);
+        }
+
+        if pattern.pattern & 0b010000000 != 0 {
+            self.set_pixel(2, 1, colour);
+        }
+
+        if pattern.pattern & 0b001000000 != 0 {
+            self.set_pixel(2, 2, colour);
+        }
+
+        if pattern.pattern & 0b000100000 != 0 {
+            self.set_pixel(1, 0, colour);
+        }
+
+        if pattern.pattern & 0b000010000 != 0 {
+            self.set_pixel(1, 1, colour);
+        }
+
+        if pattern.pattern & 0b000001000 != 0 {
+            self.set_pixel(1, 2, colour);
+        }
+
+        if pattern.pattern & 0b000000100 != 0 {
+            self.set_pixel(0, 0, colour);
+        }
+
+        if pattern.pattern & 0b000000010 != 0 {
+            self.set_pixel(0, 1, colour);
+        }
+
+        if pattern.pattern & 0b000000001 != 0 {
+            self.set_pixel(0, 2, colour);
+        }
+    }
 }
 
 static G_TIMER: Mutex<RefCell<Option<rp2040_hal::Timer>>> = Mutex::new(RefCell::new(None));
@@ -78,6 +135,29 @@ static G_INTERRUPT_RECEIVER: Mutex<
         Option<Receiver<NecDebug, rp2040_hal::gpio::Pin<Gpio10, FunctionSio<SioInput>, PullNone>>>,
     >,
 > = Mutex::new(RefCell::new(None));
+
+fn hsl2rgb(h: f64, s: f64, l: f64) -> (u8, u8, u8) {
+    let h = h * 360.0;
+    let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
+    let x = c * (1.0 - ((h / 60.0) % 2.0 - 1.0).abs());
+    let m = l - c / 2.0;
+
+    let (r, g, b) = match h {
+        0.0..=60.0 => (c, x, 0.0),
+        60.0..=120.0 => (x, c, 0.0),
+        120.0..=180.0 => (0.0, c, x),
+        180.0..=240.0 => (0.0, x, c),
+        240.0..=300.0 => (x, 0.0, c),
+        300.0..=360.0 => (c, 0.0, x),
+        _ => (0.0, 0.0, 0.0), // This should not happen in a properly constrained input.
+    };
+
+    let r = ((r + m) * 255.0).round() as u8;
+    let g = ((g + m) * 255.0).round() as u8;
+    let b = ((b + m) * 255.0).round() as u8;
+
+    (r, g, b)
+}
 
 #[entry]
 fn main() -> ! {
@@ -156,34 +236,24 @@ fn main() -> ! {
 
     mtrx.set_gain(0.1);
 
-    use smart_leds::RGB8;
     use smart_leds_trait::SmartLedsWrite;
 
-    let red: RGB8 = (255, 0, 0).into();
-    let green: RGB8 = (0, 255, 0).into();
-    let blue: RGB8 = (0, 0, 255).into();
-    let black: RGB8 = (0, 0, 0).into();
-
-    // clear all leds (if we are using a strip for debug)
-    ws.write(core::iter::repeat(black).take(400)).unwrap();
-
+    let mut t;
     loop {
-        mtrx.set_all(red);
+        t = timer.get_counter().ticks() as f64 / 1_000_000.0;
+
+        let gain = 0.5;
+
+        let color = hsl2rgb((t * 0.25) % 1.0, 1.0, 0.5 * gain);
+        let color2 = hsl2rgb((t * 0.25 + 0.5) % 1.0, 1.0, 0.5 * gain);
+
+        mtrx.set_all(color.into());
+        mtrx.render(GLIDER_PATTERN, color2.into());
         ws.write(mtrx.blit()).unwrap();
 
-        delay.delay_ms(150);
+        delay.delay_ms(1);
 
-        mtrx.set_all(green);
-        ws.write(mtrx.blit()).unwrap();
-
-        delay.delay_ms(150);
-
-        mtrx.set_all(blue);
-        ws.write(mtrx.blit()).unwrap();
-
-        delay.delay_ms(150);
-
-        ir_blaster.toggle().unwrap();
+        //ir_blaster.toggle().unwrap();
     }
 }
 
