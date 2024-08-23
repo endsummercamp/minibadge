@@ -4,6 +4,7 @@
 use core::cell::RefCell;
 
 use cortex_m::interrupt::Mutex;
+use cortex_m::prelude::_embedded_hal_adc_OneShot;
 use defmt::*;
 use defmt_rtt as _;
 use embedded_hal::digital::StatefulOutputPin;
@@ -38,14 +39,15 @@ struct LedPattern {
     pattern: u16,
 }
 
-impl LedPattern {
-
-    const fn from(pattern: u16) -> Self {
+impl From<u16> for LedPattern {
+    fn from(pattern: u16) -> Self {
         Self { pattern }
     }
 }
 
-const GLIDER_PATTERN: LedPattern = LedPattern::from(0b010001111);
+const GLIDER_PATTERN: LedPattern = LedPattern {
+    pattern: 0b010001111,
+};
 
 struct LedMatrix {
     framebuffer: [(u8, u8, u8); LED_MATRIX_SIZE],
@@ -200,6 +202,9 @@ fn main() -> ! {
 
     let (mut pio, sm0, _, _, _) = pac.PIO0.split(&mut pac.RESETS);
 
+    let mut adc = rp2040_hal::Adc::new(pac.ADC, &mut pac.RESETS);
+    let mut temperature_sensor = adc.take_temp_sensor().unwrap();
+
     let mut ir_blaster = pins.gpio11.into_push_pull_output();
     let ir_sensor = pins.gpio10.into_floating_input();
     let _user_button = pins.gpio9.into_pull_up_input();
@@ -234,18 +239,14 @@ fn main() -> ! {
 
     let mut mtrx = LedMatrix::new();
 
-    mtrx.set_gain(0.1);
-
     use smart_leds_trait::SmartLedsWrite;
 
     let mut t;
     loop {
         t = timer.get_counter().ticks() as f64 / 1_000_000.0;
 
-        let gain = 0.5;
-
-        let color = hsl2rgb((t * 0.25) % 1.0, 1.0, 0.5 * gain);
-        let color2 = hsl2rgb((t * 0.25 + 0.5) % 1.0, 1.0, 0.5 * gain);
+        let color = hsl2rgb((t * 0.25) % 1.0, 1.0, 0.5);
+        let color2 = hsl2rgb((t * 0.25 + 0.5) % 1.0, 1.0, 0.5);
 
         mtrx.set_all(color.into());
         mtrx.render(GLIDER_PATTERN, color2.into());
@@ -253,6 +254,25 @@ fn main() -> ! {
 
         delay.delay_ms(1);
 
+        let temp_sens_adc_counts: u16 = adc.read(&mut temperature_sensor).unwrap();
+
+        println!("Temp ADC: {}", temp_sens_adc_counts);
+
+        let adc_voltage = (3.3 / 4096.0) * temp_sens_adc_counts as f64;
+        let temp_degrees_c = 27.0 - (adc_voltage - 0.706) / 0.001721;
+
+        println!("Temp: {}", temp_degrees_c);
+
+        mtrx.set_gain(1.0);
+
+        // this is just a demo
+        // needs filtering at least
+        // and another task in an RTOS...
+        if temp_degrees_c > 55.0 {
+            // lerp from 55 to 65 degrees maps to gain from 1.0 to 0.1
+            let gain = 1.0 - (temp_degrees_c - 55.0) / 10.0;
+            mtrx.set_gain(gain.clamp(0.1, 1.0) as f32 * mtrx.gain);
+        }
         //ir_blaster.toggle().unwrap();
     }
 }
