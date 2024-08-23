@@ -2098,7 +2098,7 @@
 		(uuid "02a1007e-2d13-4110-afec-2edddf4f582e")
 	)
 	(label "IR_SENS"
-		(at 196.85 69.85 0)
+		(at 196.85 67.31 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
@@ -2142,7 +2142,7 @@
 		(uuid "7f24fd77-e0f7-4123-a1c6-fb1158222c4b")
 	)
 	(label "USER_BTN"
-		(at 196.85 67.31 0)
+		(at 196.85 64.77 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
