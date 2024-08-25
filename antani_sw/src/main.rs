@@ -76,7 +76,7 @@ impl LedMatrix {
     fn new() -> Self {
         Self {
             framebuffer: [(0, 0, 0).into(); LED_MATRIX_SIZE],
-            corrected_gain: 0.5,
+            corrected_gain: 1.0,
             raw_gain: 1.0,
         }
     }
@@ -201,6 +201,14 @@ static PATTERNS: LazyLock<Patterns> = LazyLock::new(|| Patterns {
     ]),
 });
 
+// if we need to override the normal rendering with a special effect, we use this enum
+#[derive(Clone)]
+enum WorkingMode {
+    Normal,                             // normal rendering, user selecting the patterns etc
+    Special(RenderCommand), // override normal rendering until the user presses the button
+    SpecialTimeout(RenderCommand, f64), // override normal rendering until the timeout
+}
+
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     info!("Program start");
@@ -214,9 +222,37 @@ async fn main(spawner: Spawner) {
     let ts = adc::Channel::new_temp_sensor(p.ADC_TEMP_SENSOR);
     unwrap!(spawner.spawn(temperature(adc, ts, CHANNEL.sender())));
 
+    let mut renderman = RenderManager {
+        mtrx: LedMatrix::new(),
+        rng: SmallRng::seed_from_u64(69420),
+    };
+    let mut ws2812 = Ws2812::new(&mut common, sm0, p.DMA_CH0, p.PIN_19);
+
+    // override normal rendering with a special effect, if needed
+    let mut working_mode = WorkingMode::Normal;
+
+    let gains = [1.0, 0.7, 0.5, 0.25];
+    let mut scene_id = 0;
+    let mut gain_id = 0;
+
     // let mut ir_blaster = pins.gpio11.into_push_pull_output();
     let ir_sensor = Input::new(p.PIN_10, Pull::None);
-    let user_button = Input::new(p.PIN_9, Pull::Up);
+    let mut user_button = Input::new(p.PIN_9, Pull::Up);
+
+    // if we start with the button pressed, function as a torch light
+    if user_button.is_low() {
+        Timer::after_millis(100).await;
+        renderman.mtrx.set_gain(1.0);
+        gain_id = 0; // just to not forget to put this at the max value
+
+        working_mode = WorkingMode::Special(RenderCommand {
+            effect: RunEffect::SimplePattern(PATTERNS.get().all_on),
+            color: ColorPalette::Solid((255, 255, 255).into()),
+            color_shaders: Vec::new(),
+        });
+
+        user_button.wait_for_high().await;
+    }
 
     unwrap!(spawner.spawn(button_driver(user_button, CHANNEL.sender())));
 
@@ -224,16 +260,7 @@ async fn main(spawner: Spawner) {
     let highpriority_spawner = EXECUTOR_HIGH.start(interrupt::SWI_IRQ_1);
     unwrap!(highpriority_spawner.spawn(ir_receiver(ir_sensor, CHANNEL.sender())));
 
-    let mut renderman = RenderManager {
-        mtrx: LedMatrix::new(),
-        rng: SmallRng::seed_from_u64(69420),
-    };
-
-    let mut ws2812 = Ws2812::new(&mut common, sm0, p.DMA_CH0, p.PIN_19);
-
     let patterns = PATTERNS.get();
-
-    println!("Starting loop");
 
     let scenes: Vec<Vec<RenderCommand, 8>, 20> = Vec::from_slice(&[
         // normal glider
@@ -323,12 +350,7 @@ async fn main(spawner: Spawner) {
     ])
     .unwrap();
 
-    let gains = [1.0, 0.7, 0.5, 0.25];
-    let mut scene_id = 0;
-    let mut gain_id = 0;
-
-    // override normal rendering with a special effect, if needed
-    let mut render_override = None;
+    println!("Starting loop");
 
     loop {
         //t = timer.get_counter().ticks() as f64 / 1_000_000.0;
@@ -382,7 +404,11 @@ async fn main(spawner: Spawner) {
 
         match hlcommand {
             Some(HighLevelCommand::NextPattern) => {
-                scene_id = (scene_id + 1) % scenes.len();
+                if let WorkingMode::Normal = working_mode {
+                    scene_id = (scene_id + 1) % scenes.len();
+                } else {
+                    working_mode = WorkingMode::Normal;
+                }
             }
 
             Some(HighLevelCommand::IncreaseBrightness)
@@ -401,27 +427,33 @@ async fn main(spawner: Spawner) {
                     _ => &patterns.power_100,
                 };
 
-                render_override = Some((
+                working_mode = WorkingMode::SpecialTimeout(
                     RenderCommand {
                         effect: RunEffect::SimplePattern(*patt),
                         color: ColorPalette::Solid((255, 255, 255).into()),
                         color_shaders: Vec::new(),
                     },
                     t + 1.0,
-                ));
+                );
             }
 
             None => {}
         }
 
-        if let Some((scene, timeout)) = &render_override {
-            if t < *timeout {
-                renderman.render(&[scene.clone()], t);
-            } else {
-                render_override = None;
+        match &working_mode {
+            WorkingMode::Normal => {
+                renderman.render(&scenes[scene_id], t);
             }
-        } else {
-            renderman.render(&scenes[scene_id], t);
+            WorkingMode::SpecialTimeout(scene, timeout) => {
+                renderman.render(&[scene.clone()], t);
+
+                if t > *timeout {
+                    working_mode = WorkingMode::Normal;
+                }
+            }
+            WorkingMode::Special(scene) => {
+                renderman.render(&[scene.clone()], t);
+            }
         }
 
         ws2812.write(&renderman.mtrx.framebuffer).await;
