@@ -1,3 +1,5 @@
+// everything in this is copy pasted from embassy example
+
 use embassy_rp::dma;
 use embassy_rp::pio::{
     Common, Config, FifoJoin, Instance, PioPin, ShiftConfig, ShiftDirection, StateMachine,
