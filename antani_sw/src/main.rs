@@ -18,6 +18,7 @@ use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
 use embassy_sync::channel::{Channel, Sender};
 use embassy_sync::lazy_lock::LazyLock;
+use embassy_time::with_timeout;
 use embassy_time::Instant;
 use embassy_time::{Duration, Ticker, Timer};
 
@@ -49,6 +50,20 @@ use ws2812::Ws2812;
 const LED_MATRIX_WIDTH: usize = 3;
 const LED_MATRIX_HEIGHT: usize = 3;
 const LED_MATRIX_SIZE: usize = LED_MATRIX_WIDTH * LED_MATRIX_HEIGHT;
+
+static GAMMA_CORRECTION: [u8; 256] = [
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5,
+    5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 9, 9, 9, 10, 10, 10, 11, 11, 11, 12, 12, 13, 13, 13, 14,
+    14, 15, 15, 16, 16, 17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 24, 24, 25, 25, 26, 27,
+    27, 28, 29, 29, 30, 31, 32, 32, 33, 34, 35, 35, 36, 37, 38, 39, 39, 40, 41, 42, 43, 44, 45, 46,
+    47, 48, 49, 50, 50, 51, 52, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 66, 67, 68, 69, 70, 72,
+    73, 74, 75, 77, 78, 79, 81, 82, 83, 85, 86, 87, 89, 90, 92, 93, 95, 96, 98, 99, 101, 102, 104,
+    105, 107, 109, 110, 112, 114, 115, 117, 119, 120, 122, 124, 126, 127, 129, 131, 133, 135, 137,
+    138, 140, 142, 144, 146, 148, 150, 152, 154, 156, 158, 160, 162, 164, 167, 169, 171, 173, 175,
+    177, 180, 182, 184, 186, 189, 191, 193, 196, 198, 200, 203, 205, 208, 210, 213, 215, 218, 220,
+    223, 225, 228, 231, 233, 236, 239, 241, 244, 247, 249, 252, 255,
+];
 
 struct LedMatrix {
     pub framebuffer: [RGB8; LED_MATRIX_SIZE],
@@ -110,6 +125,14 @@ impl LedMatrix {
             b: (colour.b as f32 * self.get_gain()) as u8,
         };
 
+        // gamma correction
+
+        let colour = RGB8 {
+            r: GAMMA_CORRECTION[colour.r as usize],
+            g: GAMMA_CORRECTION[colour.g as usize],
+            b: GAMMA_CORRECTION[colour.b as usize],
+        };
+
         // this maps bits in the pattern bitfield to the corresponding led in the matrix
         let bit_offsets = [
             (0, 2), // bit 0, first led
@@ -135,16 +158,28 @@ type AppSender = Sender<'static, CriticalSectionRawMutex, AppCommand, 8>;
 enum AppCommand {
     ThermalThrottleMultiplier(f32), // 1.0 = no throttle, 0.0 = full throttle
     IrCommand(u32),
+    ShortButtonPress,
+    LongButtonPress,
 }
 static CHANNEL: Channel<CriticalSectionRawMutex, AppCommand, 8> = Channel::new();
 
 struct Patterns {
+    pub power_100: LedPattern,
+    pub power_75: LedPattern,
+    pub power_50: LedPattern,
+    pub power_25: LedPattern,
     pub glider: LedPattern,
     pub all_on: LedPattern,
     pub everything_once: AnimationPattern,
 }
 
 static PATTERNS: LazyLock<Patterns> = LazyLock::new(|| Patterns {
+    // patterns for light power
+    power_100: LedPattern::new(0b111111111),
+    power_75: LedPattern::new(0b000111111),
+    power_50: LedPattern::new(0b000000111),
+    power_25: LedPattern::new(0b000000001),
+
     glider: LedPattern::new(0b010001111),
     all_on: LedPattern::new(0b111111111),
     everything_once: AnimationPattern::new(&[
@@ -175,7 +210,9 @@ async fn main(spawner: Spawner) {
 
     // let mut ir_blaster = pins.gpio11.into_push_pull_output();
     let ir_sensor = Input::new(p.PIN_10, Pull::None);
-    // let _user_button = pins.gpio9.into_pull_up_input();
+    let user_button = Input::new(p.PIN_9, Pull::Up);
+
+    unwrap!(spawner.spawn(button_driver(user_button, CHANNEL.sender())));
 
     interrupt::SWI_IRQ_1.set_priority(Priority::P3);
     let highpriority_spawner = EXECUTOR_HIGH.start(interrupt::SWI_IRQ_1);
@@ -239,11 +276,14 @@ async fn main(spawner: Spawner) {
         .unwrap(),
     ];
 
+    let gains = [1.0, 0.70, 0.4, 0.25];
+    let mut scene_id = 0;
+    let mut gain_id = 0;
     loop {
         //t = timer.get_counter().ticks() as f64 / 1_000_000.0;
         let t = Instant::now().as_micros() as f64 / 1_000_000.0;
 
-        renderman.mtrx.set_gain(0.5);
+        renderman.mtrx.set_gain(gains[gain_id]);
 
         if let Ok(ch) = CHANNEL.try_receive() {
             match ch {
@@ -254,12 +294,42 @@ async fn main(spawner: Spawner) {
                 AppCommand::IrCommand(cmd) => {
                     println!("IR command: {}", cmd);
                 }
+                AppCommand::ShortButtonPress => {
+                    println!("Short button press");
+                    scene_id = (scene_id + 1) % scenes.len();
+                }
+                AppCommand::LongButtonPress => {
+                    // todo: deduplicate the rendering code here
+                    println!("Long button press");
+                    gain_id = (gain_id + 1) % gains.len();
+
+                    renderman.mtrx.set_gain(gains[gain_id]);
+
+                    let patt = match gain_id {
+                        0 => &patterns.power_100,
+                        1 => &patterns.power_75,
+                        2 => &patterns.power_50,
+                        3 => &patterns.power_25,
+                        _ => &patterns.power_100,
+                    };
+
+                    renderman.render(
+                        &[RenderCommand {
+                            effect: RunEffect::SimplePattern(*patt),
+                            color: ColorPalette::Solid((255, 255, 255).into()),
+                            color_shaders: Vec::new(),
+                        }],
+                        t,
+                    );
+
+                    ws2812.write(&renderman.mtrx.framebuffer).await;
+                    Timer::after_millis(1000).await;
+                    renderman.mtrx.clear();
+                }
             }
         }
 
-        // change scene every 5 seconds
-        let scene_id = (t as u64 / 5) % scenes.len() as u64;
-        renderman.render(&scenes[scene_id as usize], t);
+        renderman.render(&scenes[scene_id], t);
 
         ws2812.write(&renderman.mtrx.framebuffer).await;
         Timer::after_millis(1).await;
@@ -317,5 +387,33 @@ async fn temperature(
         }
 
         ticker.next().await;
+    }
+}
+
+#[embassy_executor::task]
+async fn button_driver(mut button: Input<'static>, control: AppSender) {
+    let mut press_start;
+
+    loop {
+        button.wait_for_low().await;
+        press_start = Instant::now();
+
+        match with_timeout(Duration::from_millis(1000), button.wait_for_high()).await {
+            // no timeout
+            Ok(_) => {}
+            // timeout
+            Err(_) => {
+                control.send(AppCommand::LongButtonPress).await;
+                button.wait_for_high().await;
+            }
+        }
+
+        let press_duration = Instant::now() - press_start;
+
+        if press_duration >= Duration::from_millis(50)
+            && press_duration < Duration::from_millis(1000)
+        {
+            control.send(AppCommand::ShortButtonPress).await;
+        }
     }
 }
