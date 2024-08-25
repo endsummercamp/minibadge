@@ -67,8 +67,8 @@ static GAMMA_CORRECTION: [u8; 256] = [
 
 struct LedMatrix {
     pub framebuffer: [RGB8; LED_MATRIX_SIZE],
-    gain: f32,
-    override_gain: f32,
+    corrected_gain: f32,
+    raw_gain: f32,
 }
 
 #[allow(dead_code)]
@@ -76,21 +76,17 @@ impl LedMatrix {
     fn new() -> Self {
         Self {
             framebuffer: [(0, 0, 0).into(); LED_MATRIX_SIZE],
-            gain: 0.5,
-            override_gain: 1.0,
+            corrected_gain: 0.5,
+            raw_gain: 1.0,
         }
     }
 
     fn set_gain(&mut self, gain: f32) {
-        self.gain = gain;
+        self.corrected_gain = gain;
     }
 
-    fn set_override_gain(&mut self, gain: f32) {
-        self.override_gain = gain;
-    }
-
-    fn get_gain(&self) -> f32 {
-        self.gain * self.override_gain
+    fn set_raw_gain(&mut self, gain: f32) {
+        self.raw_gain = gain;
     }
 
     fn set_pixel(&mut self, x: usize, y: usize, rgb: RGB8) {
@@ -109,20 +105,11 @@ impl LedMatrix {
         self.set_all((0, 0, 0).into());
     }
 
-    fn blit(&mut self) -> impl Iterator<Item = RGB8> + '_ {
-        self.framebuffer.iter().map(|rgb| {
-            let r = (rgb.r as f32 * self.get_gain()) as u8;
-            let g = (rgb.g as f32 * self.get_gain()) as u8;
-            let b = (rgb.b as f32 * self.get_gain()) as u8;
-            (r, g, b).into()
-        })
-    }
-
     fn render(&mut self, pattern: &LedPattern, colour: RGB8) {
         let colour = RGB8 {
-            r: (colour.r as f32 * self.get_gain()) as u8,
-            g: (colour.g as f32 * self.get_gain()) as u8,
-            b: (colour.b as f32 * self.get_gain()) as u8,
+            r: (colour.r as f32 * self.corrected_gain) as u8,
+            g: (colour.g as f32 * self.corrected_gain) as u8,
+            b: (colour.b as f32 * self.corrected_gain) as u8,
         };
 
         // gamma correction
@@ -131,6 +118,12 @@ impl LedMatrix {
             r: GAMMA_CORRECTION[colour.r as usize],
             g: GAMMA_CORRECTION[colour.g as usize],
             b: GAMMA_CORRECTION[colour.b as usize],
+        };
+
+        let colour = RGB8 {
+            r: (colour.r as f32 * self.raw_gain) as u8,
+            g: (colour.g as f32 * self.raw_gain) as u8,
+            b: (colour.b as f32 * self.raw_gain) as u8,
         };
 
         // this maps bits in the pattern bitfield to the corresponding led in the matrix
@@ -276,7 +269,7 @@ async fn main(spawner: Spawner) {
         .unwrap(),
     ];
 
-    let gains = [1.0, 0.70, 0.4, 0.25];
+    let gains = [1.0, 0.7, 0.5, 0.25];
     let mut scene_id = 0;
     let mut gain_id = 0;
     loop {
@@ -288,7 +281,7 @@ async fn main(spawner: Spawner) {
         if let Ok(ch) = CHANNEL.try_receive() {
             match ch {
                 AppCommand::ThermalThrottleMultiplier(gain) => {
-                    renderman.mtrx.set_override_gain(gain);
+                    renderman.mtrx.set_raw_gain(gain);
                     println!("Thermal throttle multiplier: {}", gain);
                 }
                 AppCommand::IrCommand(cmd) => {
