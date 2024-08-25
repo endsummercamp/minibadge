@@ -208,6 +208,33 @@ enum WorkingMode {
     Special(RenderCommand), // override normal rendering until the user presses the button
     SpecialTimeout(RenderCommand, f64), // override normal rendering until the timeout
 }
+#[derive(Clone)]
+enum OutputPower {
+    High,
+    Medium,
+    Low,
+    NighMode,
+}
+
+impl OutputPower {
+    fn increase(&self) -> Self {
+        match self {
+            OutputPower::High => OutputPower::NighMode,
+            OutputPower::Medium => OutputPower::High,
+            OutputPower::Low => OutputPower::Medium,
+            OutputPower::NighMode => OutputPower::Low,
+        }
+    }
+
+    fn decrease(&self) -> Self {
+        match self {
+            OutputPower::High => OutputPower::Medium,
+            OutputPower::Medium => OutputPower::Low,
+            OutputPower::Low => OutputPower::NighMode,
+            OutputPower::NighMode => OutputPower::High,
+        }
+    }
+}
 
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
@@ -231,9 +258,8 @@ async fn main(spawner: Spawner) {
     // override normal rendering with a special effect, if needed
     let mut working_mode = WorkingMode::Normal;
 
-    let gains = [1.0, 0.7, 0.5, 0.25];
     let mut scene_id = 0;
-    let mut gain_id = 0;
+    let mut out_power = OutputPower::High;
 
     // let mut ir_blaster = pins.gpio11.into_push_pull_output();
     let ir_sensor = Input::new(p.PIN_10, Pull::None);
@@ -243,7 +269,7 @@ async fn main(spawner: Spawner) {
     if user_button.is_low() {
         Timer::after_millis(100).await;
         renderman.mtrx.set_gain(1.0);
-        gain_id = 0; // just to not forget to put this at the max value
+        out_power = OutputPower::High; // just to not forget to put this at the max value
 
         working_mode = WorkingMode::Special(RenderCommand {
             effect: RunEffect::SimplePattern(PATTERNS.get().all_on),
@@ -384,7 +410,12 @@ async fn main(spawner: Spawner) {
         //t = timer.get_counter().ticks() as f64 / 1_000_000.0;
         let t = Instant::now().as_micros() as f64 / 1_000_000.0;
 
-        renderman.mtrx.set_gain(gains[gain_id]);
+        match out_power {
+            OutputPower::High => renderman.mtrx.set_gain(1.0),
+            OutputPower::Medium => renderman.mtrx.set_gain(0.7),
+            OutputPower::Low => renderman.mtrx.set_gain(0.5),
+            OutputPower::NighMode => renderman.mtrx.set_gain(0.25),
+        }
 
         let mut hlcommand = None;
 
@@ -442,22 +473,21 @@ async fn main(spawner: Spawner) {
             Some(HighLevelCommand::IncreaseBrightness)
             | Some(HighLevelCommand::DecreaseBrightness) => {
                 if let Some(HighLevelCommand::DecreaseBrightness) = hlcommand {
-                    gain_id = (gain_id + 1) % gains.len();
+                    out_power = out_power.decrease();
                 } else {
-                    gain_id = (gain_id + gains.len() - 1) % gains.len();
+                    out_power = out_power.increase();
                 }
 
-                let patt = match gain_id {
-                    0 => &patterns.power_100,
-                    1 => &patterns.power_75,
-                    2 => &patterns.power_50,
-                    3 => &patterns.power_25,
-                    _ => &patterns.power_100,
+                let patt = match out_power {
+                    OutputPower::High => patterns.power_100,
+                    OutputPower::Medium => patterns.power_75,
+                    OutputPower::Low => patterns.power_50,
+                    OutputPower::NighMode => patterns.power_25,
                 };
 
                 working_mode = WorkingMode::SpecialTimeout(
                     RenderCommand {
-                        effect: RunEffect::SimplePattern(*patt),
+                        effect: RunEffect::SimplePattern(patt),
                         color: ColorPalette::Solid((255, 255, 255).into()),
                         color_shaders: Vec::new(),
                     },
