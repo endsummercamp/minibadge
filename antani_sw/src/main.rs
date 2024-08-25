@@ -401,6 +401,33 @@ async fn main(spawner: Spawner) {
             color_shaders: Vec::new(),
         }])
         .unwrap(),
+        // police lights
+        Vec::from_slice(&[RenderCommand {
+            effect: RunEffect::SimplePattern(patterns.all_on),
+            color: ColorPalette::Custom(
+                Vec::from_slice(&[
+                    (0, 0, 0).into(),
+                    (255, 0, 0).into(),
+                    (0, 0, 0).into(),
+                    (255, 0, 0).into(),
+                    (0, 0, 0).into(),
+                    (0, 0, 0).into(),
+                    (0, 0, 0).into(),
+                    (0, 0, 0).into(),
+                    (0, 0, 255).into(),
+                    (0, 0, 0).into(),
+                    (0, 0, 255).into(),
+                    (0, 0, 0).into(),
+                    (0, 0, 0).into(),
+                    (0, 0, 0).into(),
+                    (0, 0, 0).into(),
+                ])
+                .unwrap(),
+                15.0,
+            ),
+            color_shaders: Vec::new(),
+        }])
+        .unwrap(),
     ])
     .unwrap();
 
