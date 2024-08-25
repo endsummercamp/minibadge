@@ -272,6 +272,10 @@ async fn main(spawner: Spawner) {
     let gains = [1.0, 0.7, 0.5, 0.25];
     let mut scene_id = 0;
     let mut gain_id = 0;
+
+    // override normal rendering with a special effect, if needed
+    let mut render_override = None;
+
     loop {
         //t = timer.get_counter().ticks() as f64 / 1_000_000.0;
         let t = Instant::now().as_micros() as f64 / 1_000_000.0;
@@ -292,11 +296,8 @@ async fn main(spawner: Spawner) {
                     scene_id = (scene_id + 1) % scenes.len();
                 }
                 AppCommand::LongButtonPress => {
-                    // todo: deduplicate the rendering code here
                     println!("Long button press");
                     gain_id = (gain_id + 1) % gains.len();
-
-                    renderman.mtrx.set_gain(gains[gain_id]);
 
                     let patt = match gain_id {
                         0 => &patterns.power_100,
@@ -306,23 +307,27 @@ async fn main(spawner: Spawner) {
                         _ => &patterns.power_100,
                     };
 
-                    renderman.render(
-                        &[RenderCommand {
+                    render_override = Some((
+                        RenderCommand {
                             effect: RunEffect::SimplePattern(*patt),
                             color: ColorPalette::Solid((255, 255, 255).into()),
                             color_shaders: Vec::new(),
-                        }],
-                        t,
-                    );
-
-                    ws2812.write(&renderman.mtrx.framebuffer).await;
-                    Timer::after_millis(1000).await;
-                    renderman.mtrx.clear();
+                        },
+                        t + 1.0,
+                    ));
                 }
             }
         }
 
-        renderman.render(&scenes[scene_id], t);
+        if let Some((scene, timeout)) = &render_override {
+            if t < *timeout {
+                renderman.render(&[scene.clone()], t);
+            } else {
+                render_override = None;
+            }
+        } else {
+            renderman.render(&scenes[scene_id], t);
+        }
 
         ws2812.write(&renderman.mtrx.framebuffer).await;
         Timer::after_millis(1).await;
