@@ -169,6 +169,9 @@ struct Patterns {
     pub power_25: LedPattern,
     pub glider: LedPattern,
     pub all_on: LedPattern,
+    pub vertical_stripe_1: LedPattern,
+    pub vertical_stripe_2: LedPattern,
+    pub vertical_stripe_3: LedPattern,
     pub everything_once: AnimationPattern,
 }
 
@@ -181,6 +184,10 @@ static PATTERNS: LazyLock<Patterns> = LazyLock::new(|| Patterns {
 
     glider: LedPattern::new(0b010001111),
     all_on: LedPattern::new(0b111111111),
+    vertical_stripe_1: LedPattern::new(0b100100100),
+    vertical_stripe_2: LedPattern::new(0b010010010),
+    vertical_stripe_3: LedPattern::new(0b001001001),
+
     everything_once: AnimationPattern::new(&[
         0b100000000,
         0b010000000,
@@ -228,7 +235,21 @@ async fn main(spawner: Spawner) {
 
     println!("Starting loop");
 
-    let scenes: [Vec<RenderCommand, 8>; 3] = [
+    let scenes: Vec<Vec<RenderCommand, 8>, 20> = Vec::from_slice(&[
+        // normal glider
+        Vec::from_slice(&[RenderCommand {
+            effect: RunEffect::SimplePattern(patterns.glider),
+            color: ColorPalette::Solid((0, 0, 255).into()),
+            color_shaders: Vec::new(),
+        }])
+        .unwrap(),
+        // breathing glider
+        Vec::from_slice(&[RenderCommand {
+            effect: RunEffect::SimplePattern(patterns.glider),
+            color: ColorPalette::Solid((0, 0, 255).into()),
+            color_shaders: Vec::from_slice(&[FragmentShader::Breathing(0.7)]).unwrap(),
+        }])
+        .unwrap(),
         // strobing glider
         Vec::from_slice(&[RenderCommand {
             effect: RunEffect::SimplePattern(patterns.glider),
@@ -259,6 +280,32 @@ async fn main(spawner: Spawner) {
             },
         ])
         .unwrap(),
+        // italy flag
+        Vec::from_slice(&[
+            RenderCommand {
+                effect: RunEffect::SimplePattern(patterns.vertical_stripe_1),
+                color: ColorPalette::Solid((0, 255, 0).into()),
+                color_shaders: Vec::new(),
+            },
+            RenderCommand {
+                effect: RunEffect::SimplePattern(patterns.vertical_stripe_2),
+                color: ColorPalette::Solid((255, 255, 255).into()),
+                color_shaders: Vec::new(),
+            },
+            RenderCommand {
+                effect: RunEffect::SimplePattern(patterns.vertical_stripe_3),
+                color: ColorPalette::Solid((255, 0, 0).into()),
+                color_shaders: Vec::new(),
+            },
+        ])
+        .unwrap(),
+        // single rainbow glider
+        Vec::from_slice(&[RenderCommand {
+            effect: RunEffect::SimplePattern(patterns.glider),
+            color: ColorPalette::Rainbow(0.25, 0.0),
+            color_shaders: Vec::new(),
+        }])
+        .unwrap(),
         // double rainbow glider
         Vec::from_slice(&[
             RenderCommand {
@@ -273,7 +320,8 @@ async fn main(spawner: Spawner) {
             },
         ])
         .unwrap(),
-    ];
+    ])
+    .unwrap();
 
     let gains = [1.0, 0.7, 0.5, 0.25];
     let mut scene_id = 0;
