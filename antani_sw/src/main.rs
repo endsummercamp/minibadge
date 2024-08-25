@@ -347,6 +347,34 @@ async fn main(spawner: Spawner) {
             },
         ])
         .unwrap(),
+        // solid red
+        Vec::from_slice(&[RenderCommand {
+            effect: RunEffect::SimplePattern(patterns.all_on),
+            color: ColorPalette::Solid((255, 0, 0).into()),
+            color_shaders: Vec::new(),
+        }])
+        .unwrap(),
+        // solid green
+        Vec::from_slice(&[RenderCommand {
+            effect: RunEffect::SimplePattern(patterns.all_on),
+            color: ColorPalette::Solid((0, 255, 0).into()),
+            color_shaders: Vec::new(),
+        }])
+        .unwrap(),
+        // solid blue
+        Vec::from_slice(&[RenderCommand {
+            effect: RunEffect::SimplePattern(patterns.all_on),
+            color: ColorPalette::Solid((0, 0, 255).into()),
+            color_shaders: Vec::new(),
+        }])
+        .unwrap(),
+        // solid white
+        Vec::from_slice(&[RenderCommand {
+            effect: RunEffect::SimplePattern(patterns.all_on),
+            color: ColorPalette::Solid((255, 255, 255).into()),
+            color_shaders: Vec::new(),
+        }])
+        .unwrap(),
     ])
     .unwrap();
 
