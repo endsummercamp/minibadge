@@ -24,7 +24,7 @@ use embassy_time::{Duration, Ticker, Timer};
 
 use embassy_rp::bind_interrupts;
 use heapless::Vec;
-use infrared::{protocol::NecDebug, Receiver};
+use infrared::{protocol::Nec, Receiver};
 use panic_probe as _;
 
 mod rgbeffects;
@@ -147,14 +147,20 @@ impl LedMatrix {
     }
 }
 
-type AppSender = Sender<'static, CriticalSectionRawMutex, AppCommand, 8>;
-enum AppCommand {
+type AppSender = Sender<'static, CriticalSectionRawMutex, TaskCommand, 8>;
+enum TaskCommand {
     ThermalThrottleMultiplier(f32), // 1.0 = no throttle, 0.0 = full throttle
-    IrCommand(u32),
+    IrCommand(u8, u8, bool),        // add, cmd, repeat
     ShortButtonPress,
     LongButtonPress,
 }
-static CHANNEL: Channel<CriticalSectionRawMutex, AppCommand, 8> = Channel::new();
+static CHANNEL: Channel<CriticalSectionRawMutex, TaskCommand, 8> = Channel::new();
+
+enum HighLevelCommand {
+    NextPattern,
+    IncreaseBrightness,
+    DecreaseBrightness,
+}
 
 struct Patterns {
     pub power_100: LedPattern,
@@ -282,41 +288,82 @@ async fn main(spawner: Spawner) {
 
         renderman.mtrx.set_gain(gains[gain_id]);
 
+        let mut hlcommand = None;
+
         if let Ok(ch) = CHANNEL.try_receive() {
             match ch {
-                AppCommand::ThermalThrottleMultiplier(gain) => {
+                TaskCommand::ThermalThrottleMultiplier(gain) => {
                     renderman.mtrx.set_raw_gain(gain);
                     println!("Thermal throttle multiplier: {}", gain);
                 }
-                AppCommand::IrCommand(cmd) => {
-                    println!("IR command: {}", cmd);
+                TaskCommand::IrCommand(addr, cmd, repeat) => {
+                    println!("IR command: {} {} {}", addr, cmd, repeat);
+
+                    match (addr, cmd, repeat) {
+                        (0, 70, false) => {
+                            hlcommand = Some(HighLevelCommand::DecreaseBrightness);
+                        }
+                        (0, 69, false) => {
+                            hlcommand = Some(HighLevelCommand::IncreaseBrightness);
+                        }
+
+                        (0, 71, false) => { // off
+                        }
+
+                        (0, 67, false) => { // on
+                        }
+
+                        (0, 68, false) => {
+                            // animations
+                            hlcommand = Some(HighLevelCommand::NextPattern);
+                        }
+
+                        _ => {}
+                    }
                 }
-                AppCommand::ShortButtonPress => {
+                TaskCommand::ShortButtonPress => {
                     println!("Short button press");
-                    scene_id = (scene_id + 1) % scenes.len();
+                    hlcommand = Some(HighLevelCommand::NextPattern);
                 }
-                AppCommand::LongButtonPress => {
+                TaskCommand::LongButtonPress => {
                     println!("Long button press");
-                    gain_id = (gain_id + 1) % gains.len();
-
-                    let patt = match gain_id {
-                        0 => &patterns.power_100,
-                        1 => &patterns.power_75,
-                        2 => &patterns.power_50,
-                        3 => &patterns.power_25,
-                        _ => &patterns.power_100,
-                    };
-
-                    render_override = Some((
-                        RenderCommand {
-                            effect: RunEffect::SimplePattern(*patt),
-                            color: ColorPalette::Solid((255, 255, 255).into()),
-                            color_shaders: Vec::new(),
-                        },
-                        t + 1.0,
-                    ));
+                    hlcommand = Some(HighLevelCommand::DecreaseBrightness);
                 }
             }
+        }
+
+        match hlcommand {
+            Some(HighLevelCommand::NextPattern) => {
+                scene_id = (scene_id + 1) % scenes.len();
+            }
+
+            Some(HighLevelCommand::IncreaseBrightness)
+            | Some(HighLevelCommand::DecreaseBrightness) => {
+                if let Some(HighLevelCommand::DecreaseBrightness) = hlcommand {
+                    gain_id = (gain_id + 1) % gains.len();
+                } else {
+                    gain_id = (gain_id + gains.len() - 1) % gains.len();
+                }
+
+                let patt = match gain_id {
+                    0 => &patterns.power_100,
+                    1 => &patterns.power_75,
+                    2 => &patterns.power_50,
+                    3 => &patterns.power_25,
+                    _ => &patterns.power_100,
+                };
+
+                render_override = Some((
+                    RenderCommand {
+                        effect: RunEffect::SimplePattern(*patt),
+                        color: ColorPalette::Solid((255, 255, 255).into()),
+                        color_shaders: Vec::new(),
+                    },
+                    t + 1.0,
+                ));
+            }
+
+            None => {}
         }
 
         if let Some((scene, timeout)) = &render_override {
@@ -344,7 +391,7 @@ unsafe fn SWI_IRQ_1() {
 
 #[embassy_executor::task]
 async fn ir_receiver(ir_sensor: Input<'static>, control: AppSender) {
-    let mut int_receiver: Receiver<NecDebug, embassy_rp::gpio::Input> = Receiver::builder()
+    let mut int_receiver: Receiver<Nec, embassy_rp::gpio::Input> = Receiver::builder()
         .rc5()
         .frequency(1_000_000)
         .pin(ir_sensor)
@@ -355,7 +402,9 @@ async fn ir_receiver(ir_sensor: Input<'static>, control: AppSender) {
         int_receiver.pin_mut().wait_for_any_edge().await;
 
         if let Ok(Some(cmd)) = int_receiver.event_instant(Instant::now().as_ticks() as u32) {
-            control.send(AppCommand::IrCommand(cmd.bits)).await;
+            control
+                .send(TaskCommand::IrCommand(cmd.addr, cmd.cmd, cmd.repeat))
+                .await;
         }
     }
 }
@@ -380,7 +429,7 @@ async fn temperature(
             let gain: f64 = 1.0 - (temp_degrees_c - 55.0) / 10.0;
             let gain = gain.clamp(0.0, 1.0);
             control
-                .send(AppCommand::ThermalThrottleMultiplier(gain as f32))
+                .send(TaskCommand::ThermalThrottleMultiplier(gain as f32))
                 .await;
         }
 
@@ -401,7 +450,7 @@ async fn button_driver(mut button: Input<'static>, control: AppSender) {
             Ok(_) => {}
             // timeout
             Err(_) => {
-                control.send(AppCommand::LongButtonPress).await;
+                control.send(TaskCommand::LongButtonPress).await;
                 button.wait_for_high().await;
             }
         }
@@ -411,7 +460,7 @@ async fn button_driver(mut button: Input<'static>, control: AppSender) {
         if press_duration >= Duration::from_millis(50)
             && press_duration < Duration::from_millis(1000)
         {
-            control.send(AppCommand::ShortButtonPress).await;
+            control.send(TaskCommand::ShortButtonPress).await;
         }
     }
 }
