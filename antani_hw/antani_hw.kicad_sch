@@ -1894,6 +1894,22 @@
 		(color 0 0 0 0)
 		(uuid "9a73e5c7-64a8-4b27-ac52-01b9b90b8f61")
 	)
+	(junction
+		(at 199.39 67.31)
+		(diameter 0)
+		(color 0 0 0 0)
+		(uuid "ad36d9c0-a589-46a2-a1a9-fc5942a70c51")
+	)
+	(wire
+		(pts
+			(xy 199.39 69.85) (xy 199.39 67.31)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "1dd85dbb-817b-400b-8f8f-c6af46e3f541")
+	)
 	(wire
 		(pts
 			(xy 252.73 78.74) (xy 257.81 78.74)
@@ -1913,6 +1929,16 @@
 			(type default)
 		)
 		(uuid "245a18fe-1a14-4db8-9935-ea4b42d33ab2")
+	)
+	(wire
+		(pts
+			(xy 196.85 69.85) (xy 199.39 69.85)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "2ab140d2-39e5-4444-8776-1b243d970b3a")
 	)
 	(wire
 		(pts
@@ -1943,6 +1969,16 @@
 			(type default)
 		)
 		(uuid "4a81a6ed-5027-44db-8dc0-f2736b20eb31")
+	)
+	(wire
+		(pts
+			(xy 201.93 67.31) (xy 199.39 67.31)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4be4aa61-a820-4907-ba10-a977bce57e6f")
 	)
 	(wire
 		(pts
@@ -1983,6 +2019,16 @@
 			(type default)
 		)
 		(uuid "6b356e25-fb03-45c1-806c-a9ff128f1d48")
+	)
+	(wire
+		(pts
+			(xy 199.39 67.31) (xy 196.85 67.31)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "b97da0ad-c404-401c-a011-e142b9d18f57")
 	)
 	(wire
 		(pts
@@ -2098,7 +2144,7 @@
 		(uuid "02a1007e-2d13-4110-afec-2edddf4f582e")
 	)
 	(label "IR_SENS"
-		(at 196.85 67.31 0)
+		(at 201.93 67.31 0)
 		(fields_autoplaced yes)
 		(effects
 			(font
