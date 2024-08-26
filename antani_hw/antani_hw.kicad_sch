@@ -2410,7 +2410,7 @@
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
-		(dnp no)
+		(dnp yes)
 		(fields_autoplaced yes)
 		(uuid "0d045465-1f31-4b74-a0af-f2bbbff52cf2")
 		(property "Reference" "J1"
@@ -7705,6 +7705,15 @@
 			)
 		)
 		(property "LCSC_WHITE" "C2290 "
+			(at 248.92 139.7 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "JLCPCB Rotation Offset" "180"
 			(at 248.92 139.7 0)
 			(effects
 				(font
