@@ -291,7 +291,6 @@ async fn main(spawner: Spawner) {
     // if we start with the button pressed, function as a torch light
     if user_button.is_low() {
         Timer::after_millis(100).await;
-        renderman.mtrx.set_gain(1.0);
         out_power = OutputPower::High; // just to not forget to put this at the max value
 
         working_mode = WorkingMode::Special(RenderCommand {
