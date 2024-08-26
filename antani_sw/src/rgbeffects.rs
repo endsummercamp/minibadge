@@ -33,6 +33,10 @@ impl AnimationPattern {
             patterns: patterns.iter().map(|&p| LedPattern::new(p)).collect(),
         }
     }
+
+    pub fn len(&self) -> usize {
+        self.patterns.len()
+    }
 }
 
 #[derive(Clone)]

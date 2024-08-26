@@ -173,6 +173,7 @@ struct Patterns {
     pub vertical_stripe_2: LedPattern,
     pub vertical_stripe_3: LedPattern,
     pub everything_once: AnimationPattern,
+    pub boot_animation: AnimationPattern,
 }
 
 static PATTERNS: LazyLock<Patterns> = LazyLock::new(|| Patterns {
@@ -198,6 +199,16 @@ static PATTERNS: LazyLock<Patterns> = LazyLock::new(|| Patterns {
         0b000000100,
         0b000000010,
         0b000000001,
+    ]),
+    boot_animation: AnimationPattern::new(&[
+        0b010000000,
+        0b111010000,
+        0b111111000,
+        0b000111111,
+        0b000000111,
+        0b000000010,
+        0b000000000,
+        0b000000000,
     ]),
 });
 
@@ -255,8 +266,20 @@ async fn main(spawner: Spawner) {
     };
     let mut ws2812 = Ws2812::new(&mut common, sm0, p.DMA_CH0, p.PIN_19);
 
+    let patterns = PATTERNS.get();
+
     // override normal rendering with a special effect, if needed
-    let mut working_mode = WorkingMode::Normal;
+    let mut working_mode = WorkingMode::SpecialTimeout(
+        RenderCommand {
+            effect: RunEffect::AnimationPattern(
+                &patterns.boot_animation,
+                (patterns.boot_animation.len() as f32) * 2.0,
+            ),
+            color: ColorPalette::Rainbow(1.0, 0.0),
+            color_shaders: Vec::new(),
+        },
+        0.5,
+    );
 
     let mut scene_id = 0;
     let mut out_power = OutputPower::High;
@@ -272,7 +295,7 @@ async fn main(spawner: Spawner) {
         out_power = OutputPower::High; // just to not forget to put this at the max value
 
         working_mode = WorkingMode::Special(RenderCommand {
-            effect: RunEffect::SimplePattern(PATTERNS.get().all_on),
+            effect: RunEffect::SimplePattern(patterns.all_on),
             color: ColorPalette::Solid((255, 255, 255).into()),
             color_shaders: Vec::new(),
         });
@@ -285,8 +308,6 @@ async fn main(spawner: Spawner) {
     interrupt::SWI_IRQ_1.set_priority(Priority::P3);
     let highpriority_spawner = EXECUTOR_HIGH.start(interrupt::SWI_IRQ_1);
     unwrap!(highpriority_spawner.spawn(ir_receiver(ir_sensor, CHANNEL.sender())));
-
-    let patterns = PATTERNS.get();
 
     let scenes: Vec<Vec<RenderCommand, 8>, 20> = Vec::from_slice(&[
         // normal glider
