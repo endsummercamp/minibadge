@@ -433,9 +433,10 @@ async fn main(spawner: Spawner) {
 
     println!("Starting loop");
 
+    let mut timer_offset = 0.0;
     loop {
         //t = timer.get_counter().ticks() as f64 / 1_000_000.0;
-        let t = Instant::now().as_micros() as f64 / 1_000_000.0;
+        let t = Instant::now().as_micros() as f64 / 1_000_000.0 - timer_offset;
 
         match out_power {
             OutputPower::High => renderman.mtrx.set_gain(1.0),
@@ -466,7 +467,10 @@ async fn main(spawner: Spawner) {
                         (0, 71, false) => { // off
                         }
 
-                        (0, 67, false) => { // on
+                        (0, 67, false) => {
+                            // on
+                            // this is used to sync clocks between multiple devices
+                            timer_offset = Instant::now().as_micros() as f64 / 1_000_000.0;
                         }
 
                         (0, 68, false) => {
