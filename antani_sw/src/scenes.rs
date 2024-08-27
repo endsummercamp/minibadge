@@ -88,29 +88,18 @@ pub fn scenes() -> Vec<Vec<RenderCommand, 8>, 20> {
             ..Default::default()
         }])
         .unwrap(),
-        // strobing glider
-        Vec::from_slice(&[RenderCommand {
-            effect: Pattern::Simple(patterns.glider),
-            color: ColorPalette::Solid((0, 0, 255).into()),
-            pattern_shaders: Vec::from_slice(&[
-                FragmentShader::Breathing(0.7),
-                FragmentShader::Blinking(10.0),
-            ])
-            .unwrap(),
-            ..Default::default()
-        }])
-        .unwrap(),
-        // glider with particles
+        // glider with glitter
         Vec::from_slice(&[
-            RenderCommand {
-                effect: Pattern::Animation(&patterns.everything_once, 6.0),
-                color: ColorPalette::Rainbow(0.25),
-                ..Default::default()
-            },
             RenderCommand {
                 effect: Pattern::Simple(patterns.glider),
                 color: ColorPalette::Solid((0, 0, 255).into()),
-                pattern_shaders: Vec::from_slice(&[FragmentShader::Breathing(0.7)]).unwrap(),
+                ..Default::default()
+            },
+            RenderCommand {
+                effect: Pattern::AnimationRandom(&patterns.everything_once, 300),
+                color: ColorPalette::Rainbow(0.25),
+                screen_shaders: Vec::from_slice(&[FragmentShader::LowPassWithPeak(10000.0)])
+                    .unwrap(),
                 ..Default::default()
             },
         ])

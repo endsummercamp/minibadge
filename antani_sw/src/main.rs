@@ -49,20 +49,7 @@ const LED_MATRIX_WIDTH: usize = 3;
 const LED_MATRIX_HEIGHT: usize = 3;
 const LED_MATRIX_SIZE: usize = LED_MATRIX_WIDTH * LED_MATRIX_HEIGHT;
 
-static GAMMA_CORRECTION: [u8; 256] = [
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 5, 5, 5,
-    5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 9, 9, 9, 10, 10, 10, 11, 11, 11, 12, 12, 13, 13, 13, 14,
-    14, 15, 15, 16, 16, 17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 24, 24, 25, 25, 26, 27,
-    27, 28, 29, 29, 30, 31, 32, 32, 33, 34, 35, 35, 36, 37, 38, 39, 39, 40, 41, 42, 43, 44, 45, 46,
-    47, 48, 49, 50, 50, 51, 52, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 66, 67, 68, 69, 70, 72,
-    73, 74, 75, 77, 78, 79, 81, 82, 83, 85, 86, 87, 89, 90, 92, 93, 95, 96, 98, 99, 101, 102, 104,
-    105, 107, 109, 110, 112, 114, 115, 117, 119, 120, 122, 124, 126, 127, 129, 131, 133, 135, 137,
-    138, 140, 142, 144, 146, 148, 150, 152, 154, 156, 158, 160, 162, 164, 167, 169, 171, 173, 175,
-    177, 180, 182, 184, 186, 189, 191, 193, 196, 198, 200, 203, 205, 208, 210, 213, 215, 218, 220,
-    223, 225, 228, 231, 233, 236, 239, 241, 244, 247, 249, 252, 255,
-];
-
+#[derive(Clone, Copy, Default)]
 struct RawFramebuffer<T>
 where
     T: Default + Copy,
@@ -107,6 +94,7 @@ where
 
 struct LedMatrix {
     raw_framebuffer: RawFramebuffer<RGB8>,
+    gamma_corrected_framebuffer: RawFramebuffer<RGB8>,
     corrected_gain: f32,
     raw_gain: f32,
 }
@@ -115,6 +103,7 @@ impl LedMatrix {
     fn new() -> Self {
         Self {
             raw_framebuffer: RawFramebuffer::new(),
+            gamma_corrected_framebuffer: RawFramebuffer::new(),
             corrected_gain: 1.0,
             raw_gain: 1.0,
         }
@@ -133,35 +122,58 @@ impl LedMatrix {
     }
 
     fn set_pixel(&mut self, x: usize, y: usize, colour: RGB8) {
-        let colour = RGB8 {
-            r: (colour.r as f32 * self.corrected_gain) as u8,
-            g: (colour.g as f32 * self.corrected_gain) as u8,
-            b: (colour.b as f32 * self.corrected_gain) as u8,
-        };
-
-        // gamma correction
-
-        let colour = RGB8 {
-            r: GAMMA_CORRECTION[colour.r as usize],
-            g: GAMMA_CORRECTION[colour.g as usize],
-            b: GAMMA_CORRECTION[colour.b as usize],
-        };
-
-        let colour = RGB8 {
-            r: (colour.r as f32 * self.raw_gain) as u8,
-            g: (colour.g as f32 * self.raw_gain) as u8,
-            b: (colour.b as f32 * self.raw_gain) as u8,
-        };
-
         self.raw_framebuffer.set_pixel(x, y, colour);
+    }
+
+    fn update_gamma_correction_and_gain(&mut self) {
+        static GAMMA_CORRECTION: [u8; 256] = [
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 4, 4,
+            4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 8, 8, 8, 9, 9, 9, 10, 10, 10, 11, 11, 11,
+            12, 12, 13, 13, 13, 14, 14, 15, 15, 16, 16, 17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22,
+            22, 23, 24, 24, 25, 25, 26, 27, 27, 28, 29, 29, 30, 31, 32, 32, 33, 34, 35, 35, 36, 37,
+            38, 39, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 50, 51, 52, 54, 55, 56, 57, 58,
+            59, 60, 61, 62, 63, 64, 66, 67, 68, 69, 70, 72, 73, 74, 75, 77, 78, 79, 81, 82, 83, 85,
+            86, 87, 89, 90, 92, 93, 95, 96, 98, 99, 101, 102, 104, 105, 107, 109, 110, 112, 114,
+            115, 117, 119, 120, 122, 124, 126, 127, 129, 131, 133, 135, 137, 138, 140, 142, 144,
+            146, 148, 150, 152, 154, 156, 158, 160, 162, 164, 167, 169, 171, 173, 175, 177, 180,
+            182, 184, 186, 189, 191, 193, 196, 198, 200, 203, 205, 208, 210, 213, 215, 218, 220,
+            223, 225, 228, 231, 233, 236, 239, 241, 244, 247, 249, 252, 255,
+        ];
+
+        for i in 0..LED_MATRIX_SIZE {
+            let colour = self.raw_framebuffer.framebuffer[i];
+
+            let colour = RGB8 {
+                r: (colour.r as f32 * self.corrected_gain) as u8,
+                g: (colour.g as f32 * self.corrected_gain) as u8,
+                b: (colour.b as f32 * self.corrected_gain) as u8,
+            };
+
+            let colour = RGB8 {
+                r: GAMMA_CORRECTION[colour.r as usize],
+                g: GAMMA_CORRECTION[colour.g as usize],
+                b: GAMMA_CORRECTION[colour.b as usize],
+            };
+
+            let colour = RGB8 {
+                r: (colour.r as f32 * self.raw_gain) as u8,
+                g: (colour.g as f32 * self.raw_gain) as u8,
+                b: (colour.b as f32 * self.raw_gain) as u8,
+            };
+
+            self.gamma_corrected_framebuffer.framebuffer[i] = colour;
+        }
     }
 
     fn set_all(&mut self, rgb: RGB8) {
         self.raw_framebuffer.set_all(rgb);
     }
 
-    fn get_raw(&self) -> &[RGB8; LED_MATRIX_SIZE] {
-        self.raw_framebuffer.get_raw()
+    fn get_gamma_corrected(&mut self) -> &[RGB8; LED_MATRIX_SIZE] {
+        self.update_gamma_correction_and_gain();
+
+        self.gamma_corrected_framebuffer.get_raw()
     }
 
     fn clear(&mut self) {
@@ -235,6 +247,7 @@ async fn main(spawner: Spawner) {
     let mut renderman = RenderManager {
         mtrx: LedMatrix::new(),
         rng: SmallRng::seed_from_u64(69420),
+        persistent_data: Default::default(),
     };
     let mut ws2812 = Ws2812::new(&mut common, sm0, p.DMA_CH0, p.PIN_19);
 
@@ -397,7 +410,7 @@ async fn main(spawner: Spawner) {
             }
         }
 
-        ws2812.write(renderman.mtrx.get_raw()).await;
+        ws2812.write(renderman.mtrx.get_gamma_corrected()).await;
         Timer::after_millis(1).await;
         renderman.mtrx.clear();
     }

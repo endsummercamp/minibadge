@@ -49,9 +49,16 @@ pub struct RenderCommand {
     pub time_offset: f64,
 }
 
+#[derive(Clone, Default)]
+pub struct ShaderPersistentData {
+    pub frame_counter: u32,
+    pub lowpass: RawFramebuffer<RGB8>,
+}
+
 pub struct RenderManager {
     pub mtrx: LedMatrix,
     pub rng: SmallRng,
+    pub persistent_data: ShaderPersistentData,
 }
 
 impl RenderManager {
@@ -80,7 +87,7 @@ impl RenderManager {
                 let mut color = startcolor;
 
                 for shader in command.pattern_shaders.iter() {
-                    color = shader.render(t, color, *x, *y).await;
+                    color = shader.render(t, color, *x, *y, self).await;
                 }
 
                 self.mtrx.set_pixel(*x, *y, color);
@@ -88,7 +95,7 @@ impl RenderManager {
 
             for shader in command.screen_shaders.iter() {
                 let mut color = self.mtrx.get_pixel(*x, *y);
-                color = shader.render(t, color, *x, *y).await;
+                color = shader.render(t, color, *x, *y, self).await;
                 self.mtrx.set_pixel(*x, *y, color);
             }
         }
@@ -134,20 +141,14 @@ pub enum FragmentShader {
 }
 
 impl FragmentShader {
-    async fn render(&self, t: f64, color: RGB8, x: usize, y: usize) -> RGB8 {
-        static LOWPASS: Mutex<ThreadModeRawMutex, Option<RawFramebuffer<RGB8>>> = Mutex::new(None);
-
-        // this is a bit dumb but won't bother a 100MHz MCU that much
-        // this function should never be called concurrently anyway
-
-        let mut locked = LOWPASS.lock().await;
-
-        if locked.as_ref().is_none() {
-            locked.replace(RawFramebuffer::new());
-        }
-
-        let lowpass = locked.as_mut().unwrap();
-
+    async fn render(
+        &self,
+        t: f64,
+        color: RGB8,
+        x: usize,
+        y: usize,
+        renderman: &mut RenderManager,
+    ) -> RGB8 {
         match self {
             FragmentShader::Breathing(speed) => {
                 let t = t * *speed as f64;
@@ -167,32 +168,39 @@ impl FragmentShader {
             FragmentShader::LowPass(tau) => {
                 // low pass pixel value
 
-                let rgb = lowpass.get_pixel(x, y);
+                let rgb = renderman.persistent_data.lowpass.get_pixel(x, y);
                 let (r, g, b) = (rgb.r as f32, rgb.g as f32, rgb.b as f32);
 
                 let r = r + (color.r as f32 - r) / *tau;
                 let g = g + (color.g as f32 - g) / *tau;
                 let b = b + (color.b as f32 - b) / *tau;
 
-                lowpass.set_pixel(x, y, (r as u8, g as u8, b as u8).into());
+                let col = (r as u8, g as u8, b as u8).into();
+                renderman.persistent_data.lowpass.set_pixel(x, y, col);
 
-                lowpass.get_pixel(x, y)
+                assert!(renderman.persistent_data.lowpass.get_pixel(x, y) == col);
+
+                col
             }
 
             FragmentShader::LowPassWithPeak(tau) => {
                 // low pass pixel value
                 // but if the pixel value is higher than the low pass value, use the pixel value
 
-                let rgb = lowpass.get_pixel(x, y);
+                let rgb = renderman.persistent_data.lowpass.get_pixel(x, y);
                 let (r, g, b) = (rgb.r as f32, rgb.g as f32, rgb.b as f32);
 
                 let r = (r + (color.r as f32 - r) / *tau).max(color.r as f32);
                 let g = (g + (color.g as f32 - g) / *tau).max(color.g as f32);
                 let b = (b + (color.b as f32 - b) / *tau).max(color.b as f32);
 
-                lowpass.set_pixel(x, y, (r as u8, g as u8, b as u8).into());
+                renderman.persistent_data.lowpass.set_pixel(
+                    x,
+                    y,
+                    (r as u8, g as u8, b as u8).into(),
+                );
 
-                lowpass.get_pixel(x, y)
+                renderman.persistent_data.lowpass.get_pixel(x, y)
             }
 
             FragmentShader::Rainbow2D(speed) => {
@@ -206,7 +214,6 @@ impl FragmentShader {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Clone)]
 pub enum ColorPalette {
     Rainbow(f32), // speed
@@ -233,13 +240,12 @@ impl ColorPalette {
     }
 }
 
-#[allow(dead_code)]
 #[derive(Clone)]
 pub enum Pattern {
     Simple(LedPattern),
     Animation(&'static AnimationPattern, f32), // pattern, speed
     AnimationReverse(&'static AnimationPattern, f32), // pattern, speed
-    AnimationRandom(&'static AnimationPattern), // pattern
+    AnimationRandom(&'static AnimationPattern, u16), // pattern, decimation
 }
 
 impl Default for Pattern {
@@ -262,10 +268,19 @@ impl Pattern {
                 let pattern = &pattern.patterns[pattern.patterns.len() - idx - 1];
                 *pattern
             }
-            Pattern::AnimationRandom(pattern) => {
-                let idx = renderman.rng.gen_range(0..pattern.patterns.len());
-                let pattern = &pattern.patterns[idx];
-                *pattern
+            Pattern::AnimationRandom(pattern, decimation) => {
+                // since picking a random pattern every frame will look like noise,
+                // we pick a random pattern every decimation frames
+
+                renderman.persistent_data.frame_counter += 1;
+
+                if renderman.persistent_data.frame_counter % *decimation as u32 == 0 {
+                    let idx = renderman.rng.gen_range(0..pattern.patterns.len());
+                    let pattern = &pattern.patterns[idx];
+                    *pattern
+                } else {
+                    LedPattern::new(0)
+                }
             }
         }
     }
