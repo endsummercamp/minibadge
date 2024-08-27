@@ -65,17 +65,52 @@ static GAMMA_CORRECTION: [u8; 256] = [
     223, 225, 228, 231, 233, 236, 239, 241, 244, 247, 249, 252, 255,
 ];
 
+struct LedFramebuffer {
+    framebuffer: [RGB8; LED_MATRIX_SIZE],
+}
+
+impl LedFramebuffer {
+    const fn new() -> Self {
+        Self {
+            framebuffer: [RGB8 { r: 0, g: 0, b: 0 }; LED_MATRIX_SIZE],
+        }
+    }
+
+    fn set_pixel(&mut self, x: usize, y: usize, colour: RGB8) {
+        if x < LED_MATRIX_WIDTH && y < LED_MATRIX_HEIGHT {
+            self.framebuffer[y * LED_MATRIX_WIDTH + x] = colour;
+        }
+    }
+
+    fn get_pixel(&self, x: usize, y: usize) -> RGB8 {
+        if x < LED_MATRIX_WIDTH && y < LED_MATRIX_HEIGHT {
+            self.framebuffer[y * LED_MATRIX_WIDTH + x]
+        } else {
+            RGB8 { r: 0, g: 0, b: 0 }
+        }
+    }
+
+    fn set_all(&mut self, rgb: RGB8) {
+        for i in 0..LED_MATRIX_SIZE {
+            self.framebuffer[i] = rgb;
+        }
+    }
+
+    fn get_raw(&self) -> &[RGB8; LED_MATRIX_SIZE] {
+        &self.framebuffer
+    }
+}
+
 struct LedMatrix {
-    pub framebuffer: [RGB8; LED_MATRIX_SIZE],
+    raw_framebuffer: LedFramebuffer,
     corrected_gain: f32,
     raw_gain: f32,
 }
 
-#[allow(dead_code)]
 impl LedMatrix {
     fn new() -> Self {
         Self {
-            framebuffer: [(0, 0, 0).into(); LED_MATRIX_SIZE],
+            raw_framebuffer: LedFramebuffer::new(),
             corrected_gain: 1.0,
             raw_gain: 1.0,
         }
@@ -89,23 +124,11 @@ impl LedMatrix {
         self.raw_gain = gain;
     }
 
-    fn set_pixel(&mut self, x: usize, y: usize, rgb: RGB8) {
-        if x < LED_MATRIX_WIDTH && y < LED_MATRIX_HEIGHT {
-            self.framebuffer[y * LED_MATRIX_WIDTH + x] = rgb;
-        }
+    fn get_pixel(&self, x: usize, y: usize) -> RGB8 {
+        self.raw_framebuffer.get_pixel(x, y)
     }
 
-    fn set_all(&mut self, rgb: RGB8) {
-        for i in 0..LED_MATRIX_SIZE {
-            self.framebuffer[i] = rgb;
-        }
-    }
-
-    fn clear(&mut self) {
-        self.set_all((0, 0, 0).into());
-    }
-
-    fn render(&mut self, pattern: &LedPattern, colour: RGB8) {
+    fn set_pixel(&mut self, x: usize, y: usize, colour: RGB8) {
         let colour = RGB8 {
             r: (colour.r as f32 * self.corrected_gain) as u8,
             g: (colour.g as f32 * self.corrected_gain) as u8,
@@ -126,24 +149,19 @@ impl LedMatrix {
             b: (colour.b as f32 * self.raw_gain) as u8,
         };
 
-        // this maps bits in the pattern bitfield to the corresponding led in the matrix
-        let bit_offsets = [
-            (0, 2), // bit 0, first led
-            (0, 1),
-            (0, 0),
-            (1, 2),
-            (1, 1),
-            (1, 0),
-            (2, 2),
-            (2, 1),
-            (2, 0), // bit 8, the last led
-        ];
+        self.raw_framebuffer.set_pixel(x, y, colour);
+    }
 
-        for (i, (x, y)) in bit_offsets.iter().enumerate() {
-            if pattern.pattern & (1 << i) != 0 {
-                self.set_pixel(*x, *y, colour);
-            }
-        }
+    fn set_all(&mut self, rgb: RGB8) {
+        self.raw_framebuffer.set_all(rgb);
+    }
+
+    fn get_raw(&self) -> &[RGB8; LED_MATRIX_SIZE] {
+        self.raw_framebuffer.get_raw()
+    }
+
+    fn clear(&mut self) {
+        self.set_all((0, 0, 0).into());
     }
 }
 
@@ -202,11 +220,13 @@ static PATTERNS: LazyLock<Patterns> = LazyLock::new(|| Patterns {
     ]),
     boot_animation: AnimationPattern::new(&[
         0b010000000,
-        0b111010000,
+        0b010010000,
         0b111111000,
         0b000111111,
         0b000000111,
         0b000000010,
+        0b000000000,
+        0b000000000,
         0b000000000,
         0b000000000,
     ]),
@@ -276,13 +296,14 @@ async fn main(spawner: Spawner) {
                 (patterns.boot_animation.len() as f32) * 2.0,
             ),
             color: ColorPalette::Rainbow(1.0, 0.0),
-            color_shaders: Vec::new(),
+            pattern_shaders: Vec::from_slice(&[FragmentShader::LowPassWithPeak(50.0)]).unwrap(),
+            ..Default::default()
         },
         0.5,
     );
 
     let mut scene_id = 0;
-    let mut out_power = OutputPower::High;
+    let mut out_power = OutputPower::Medium;
 
     // let mut ir_blaster = pins.gpio11.into_push_pull_output();
     let ir_sensor = Input::new(p.PIN_10, Pull::None);
@@ -296,7 +317,7 @@ async fn main(spawner: Spawner) {
         working_mode = WorkingMode::Special(RenderCommand {
             effect: RunEffect::SimplePattern(patterns.all_on),
             color: ColorPalette::Solid((255, 255, 255).into()),
-            color_shaders: Vec::new(),
+            ..Default::default()
         });
 
         user_button.wait_for_high().await;
@@ -313,25 +334,27 @@ async fn main(spawner: Spawner) {
         Vec::from_slice(&[RenderCommand {
             effect: RunEffect::SimplePattern(patterns.glider),
             color: ColorPalette::Solid((0, 0, 255).into()),
-            color_shaders: Vec::new(),
+            ..Default::default()
         }])
         .unwrap(),
         // breathing glider
         Vec::from_slice(&[RenderCommand {
             effect: RunEffect::SimplePattern(patterns.glider),
             color: ColorPalette::Solid((0, 0, 255).into()),
-            color_shaders: Vec::from_slice(&[FragmentShader::Breathing(0.7)]).unwrap(),
+            pattern_shaders: Vec::from_slice(&[FragmentShader::Breathing(0.7)]).unwrap(),
+            ..Default::default()
         }])
         .unwrap(),
         // strobing glider
         Vec::from_slice(&[RenderCommand {
             effect: RunEffect::SimplePattern(patterns.glider),
             color: ColorPalette::Solid((0, 0, 255).into()),
-            color_shaders: Vec::from_slice(&[
+            pattern_shaders: Vec::from_slice(&[
                 FragmentShader::Breathing(0.7),
                 FragmentShader::Blinking(10.0),
             ])
             .unwrap(),
+            ..Default::default()
         }])
         .unwrap(),
         // glider with particles
@@ -339,17 +362,18 @@ async fn main(spawner: Spawner) {
             RenderCommand {
                 effect: RunEffect::SimplePattern(patterns.glider),
                 color: ColorPalette::Solid((0, 0, 255).into()),
-                color_shaders: Vec::from_slice(&[FragmentShader::Breathing(0.7)]).unwrap(),
+                pattern_shaders: Vec::from_slice(&[FragmentShader::Breathing(0.7)]).unwrap(),
+                ..Default::default()
             },
             RenderCommand {
                 effect: RunEffect::AnimationPattern(&patterns.everything_once, 6.0),
                 color: ColorPalette::Rainbow(0.25, 0.0),
-                color_shaders: Vec::new(),
+                ..Default::default()
             },
             RenderCommand {
                 effect: RunEffect::ReverseAnimationPattern(&patterns.everything_once, 6.0),
                 color: ColorPalette::Rainbow(0.25, 0.5),
-                color_shaders: Vec::new(),
+                ..Default::default()
             },
         ])
         .unwrap(),
@@ -358,17 +382,17 @@ async fn main(spawner: Spawner) {
             RenderCommand {
                 effect: RunEffect::SimplePattern(patterns.vertical_stripe_1),
                 color: ColorPalette::Solid((0, 255, 0).into()),
-                color_shaders: Vec::new(),
+                ..Default::default()
             },
             RenderCommand {
                 effect: RunEffect::SimplePattern(patterns.vertical_stripe_2),
                 color: ColorPalette::Solid((255, 255, 255).into()),
-                color_shaders: Vec::new(),
+                ..Default::default()
             },
             RenderCommand {
                 effect: RunEffect::SimplePattern(patterns.vertical_stripe_3),
                 color: ColorPalette::Solid((255, 0, 0).into()),
-                color_shaders: Vec::new(),
+                ..Default::default()
             },
         ])
         .unwrap(),
@@ -376,7 +400,7 @@ async fn main(spawner: Spawner) {
         Vec::from_slice(&[RenderCommand {
             effect: RunEffect::SimplePattern(patterns.glider),
             color: ColorPalette::Rainbow(0.25, 0.0),
-            color_shaders: Vec::new(),
+            ..Default::default()
         }])
         .unwrap(),
         // double rainbow glider
@@ -384,12 +408,12 @@ async fn main(spawner: Spawner) {
             RenderCommand {
                 effect: RunEffect::SimplePattern(patterns.all_on),
                 color: ColorPalette::Rainbow(0.25, 0.0),
-                color_shaders: Vec::new(),
+                ..Default::default()
             },
             RenderCommand {
                 effect: RunEffect::SimplePattern(patterns.glider),
                 color: ColorPalette::Rainbow(0.25, 0.5),
-                color_shaders: Vec::new(),
+                ..Default::default()
             },
         ])
         .unwrap(),
@@ -397,28 +421,28 @@ async fn main(spawner: Spawner) {
         Vec::from_slice(&[RenderCommand {
             effect: RunEffect::SimplePattern(patterns.all_on),
             color: ColorPalette::Solid((255, 0, 0).into()),
-            color_shaders: Vec::new(),
+            ..Default::default()
         }])
         .unwrap(),
         // solid green
         Vec::from_slice(&[RenderCommand {
             effect: RunEffect::SimplePattern(patterns.all_on),
             color: ColorPalette::Solid((0, 255, 0).into()),
-            color_shaders: Vec::new(),
+            ..Default::default()
         }])
         .unwrap(),
         // solid blue
         Vec::from_slice(&[RenderCommand {
             effect: RunEffect::SimplePattern(patterns.all_on),
             color: ColorPalette::Solid((0, 0, 255).into()),
-            color_shaders: Vec::new(),
+            ..Default::default()
         }])
         .unwrap(),
         // solid white
         Vec::from_slice(&[RenderCommand {
             effect: RunEffect::SimplePattern(patterns.all_on),
             color: ColorPalette::Solid((255, 255, 255).into()),
-            color_shaders: Vec::new(),
+            ..Default::default()
         }])
         .unwrap(),
         // police lights
@@ -445,7 +469,7 @@ async fn main(spawner: Spawner) {
                 .unwrap(),
                 15.0,
             ),
-            color_shaders: Vec::new(),
+            ..Default::default()
         }])
         .unwrap(),
     ])
@@ -540,7 +564,7 @@ async fn main(spawner: Spawner) {
                     RenderCommand {
                         effect: RunEffect::SimplePattern(patt),
                         color: ColorPalette::Solid((255, 255, 255).into()),
-                        color_shaders: Vec::new(),
+                        ..Default::default()
                     },
                     t + 1.0,
                 );
@@ -565,7 +589,7 @@ async fn main(spawner: Spawner) {
             }
         }
 
-        ws2812.write(&renderman.mtrx.framebuffer).await;
+        ws2812.write(renderman.mtrx.get_raw()).await;
         Timer::after_millis(1).await;
         renderman.mtrx.clear();
     }
