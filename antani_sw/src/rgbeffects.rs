@@ -1,10 +1,11 @@
 use core::f64;
+use embassy_sync::{blocking_mutex::raw::ThreadModeRawMutex, mutex::Mutex};
 use heapless::Vec;
 use num_traits::real::Real;
 use rand::{rngs::SmallRng, Rng};
 use smart_leds::RGB8;
 
-use crate::{LedFramebuffer, LedMatrix};
+use crate::{LedMatrix, RawFramebuffer};
 
 #[derive(Clone, Copy)]
 pub struct LedPattern {
@@ -41,10 +42,11 @@ impl AnimationPattern {
 
 #[derive(Clone, Default)]
 pub struct RenderCommand {
-    pub effect: RunEffect,
+    pub effect: Pattern,
     pub color: ColorPalette,
     pub pattern_shaders: Vec<FragmentShader, 8>,
     pub screen_shaders: Vec<FragmentShader, 8>,
+    pub time_offset: f64,
 }
 
 pub struct RenderManager {
@@ -53,7 +55,8 @@ pub struct RenderManager {
 }
 
 impl RenderManager {
-    fn render_single(&mut self, command: &RenderCommand, t: f64) {
+    async fn render_single(&mut self, command: &RenderCommand, t: f64) {
+        let t = t + command.time_offset;
         let startcolor = command.color.render(t);
 
         let pattern = command.effect.render(t, self);
@@ -77,7 +80,7 @@ impl RenderManager {
                 let mut color = startcolor;
 
                 for shader in command.pattern_shaders.iter() {
-                    color = shader.render(t, color, *x, *y);
+                    color = shader.render(t, color, *x, *y).await;
                 }
 
                 self.mtrx.set_pixel(*x, *y, color);
@@ -85,15 +88,15 @@ impl RenderManager {
 
             for shader in command.screen_shaders.iter() {
                 let mut color = self.mtrx.get_pixel(*x, *y);
-                color = shader.render(t, color, *x, *y);
+                color = shader.render(t, color, *x, *y).await;
                 self.mtrx.set_pixel(*x, *y, color);
             }
         }
     }
 
-    pub fn render(&mut self, command: &[RenderCommand], t: f64) {
+    pub async fn render(&mut self, command: &[RenderCommand], t: f64) {
         for c in command.iter() {
-            self.render_single(c, t);
+            self.render_single(c, t).await;
         }
     }
 }
@@ -127,15 +130,27 @@ pub enum FragmentShader {
     Blinking(f32),        // speed
     LowPass(f32),         // tau
     LowPassWithPeak(f32), // tau
+    Rainbow2D(f32),       // speed
 }
 
 impl FragmentShader {
-    fn render(&self, t: f64, color: RGB8, x: usize, y: usize) -> RGB8 {
-        static mut LOWPASS: LedFramebuffer = LedFramebuffer::new();
+    async fn render(&self, t: f64, color: RGB8, x: usize, y: usize) -> RGB8 {
+        static LOWPASS: Mutex<ThreadModeRawMutex, Option<RawFramebuffer<RGB8>>> = Mutex::new(None);
+
+        // this is a bit dumb but won't bother a 100MHz MCU that much
+        // this function should never be called concurrently anyway
+
+        let mut locked = LOWPASS.lock().await;
+
+        if locked.as_ref().is_none() {
+            locked.replace(RawFramebuffer::new());
+        }
+
+        let lowpass = locked.as_mut().unwrap();
 
         match self {
             FragmentShader::Breathing(speed) => {
-                let t = (t * *speed as f64) % 1.0;
+                let t = t * *speed as f64;
                 let l = 0.5 + 0.5 * (2.0 * f64::consts::PI * t).sin();
                 let c = (color.r as f64 * l, color.g as f64 * l, color.b as f64 * l);
                 (c.0 as u8, c.1 as u8, c.2 as u8).into()
@@ -151,7 +166,6 @@ impl FragmentShader {
 
             FragmentShader::LowPass(tau) => {
                 // low pass pixel value
-                let lowpass = unsafe { &mut LOWPASS };
 
                 let rgb = lowpass.get_pixel(x, y);
                 let (r, g, b) = (rgb.r as f32, rgb.g as f32, rgb.b as f32);
@@ -169,8 +183,6 @@ impl FragmentShader {
                 // low pass pixel value
                 // but if the pixel value is higher than the low pass value, use the pixel value
 
-                let lowpass = unsafe { &mut LOWPASS };
-
                 let rgb = lowpass.get_pixel(x, y);
                 let (r, g, b) = (rgb.r as f32, rgb.g as f32, rgb.b as f32);
 
@@ -182,6 +194,14 @@ impl FragmentShader {
 
                 lowpass.get_pixel(x, y)
             }
+
+            FragmentShader::Rainbow2D(speed) => {
+                // rainbow effect that moves in 2D space
+
+                let t = t * *speed as f64;
+                let h = (x as f64 + y as f64) / 16.0 + t;
+                hsl2rgb(h % 1.0, 1.0, 0.5)
+            }
         }
     }
 }
@@ -189,7 +209,7 @@ impl FragmentShader {
 #[allow(dead_code)]
 #[derive(Clone)]
 pub enum ColorPalette {
-    Rainbow(f32, f32), // speed, phase
+    Rainbow(f32), // speed
     Solid(RGB8),
     Custom(Vec<RGB8, 16>, f32), // palette, speed
 }
@@ -203,12 +223,10 @@ impl Default for ColorPalette {
 impl ColorPalette {
     fn render(&self, t: f64) -> RGB8 {
         match self {
-            ColorPalette::Rainbow(speed, phase) => {
-                hsl2rgb((t * *speed as f64 + *phase as f64) % 1.0, 1.0, 0.5)
-            }
+            ColorPalette::Rainbow(speed) => hsl2rgb((t * *speed as f64) % 1.0, 1.0, 0.5),
             ColorPalette::Solid(rgb) => *rgb,
             ColorPalette::Custom(palette, speed) => {
-                let idx = (t * *speed as f64) as usize % palette.len();
+                let idx = (t * *speed as f64).floor() as usize % palette.len();
                 palette[idx]
             }
         }
@@ -217,34 +235,34 @@ impl ColorPalette {
 
 #[allow(dead_code)]
 #[derive(Clone)]
-pub enum RunEffect {
-    SimplePattern(LedPattern),
-    AnimationPattern(&'static AnimationPattern, f32), // pattern, speed
-    ReverseAnimationPattern(&'static AnimationPattern, f32), // pattern, speed
-    AnimationRandom(&'static AnimationPattern),       // pattern
+pub enum Pattern {
+    Simple(LedPattern),
+    Animation(&'static AnimationPattern, f32), // pattern, speed
+    AnimationReverse(&'static AnimationPattern, f32), // pattern, speed
+    AnimationRandom(&'static AnimationPattern), // pattern
 }
 
-impl Default for RunEffect {
+impl Default for Pattern {
     fn default() -> Self {
-        RunEffect::SimplePattern(LedPattern::new(0b111111111))
+        Pattern::Simple(LedPattern::new(0b111111111))
     }
 }
 
-impl RunEffect {
+impl Pattern {
     fn render(&self, t: f64, renderman: &mut RenderManager) -> LedPattern {
         match self {
-            RunEffect::SimplePattern(pattern) => *pattern,
-            RunEffect::AnimationPattern(pattern, speed) => {
+            Pattern::Simple(pattern) => *pattern,
+            Pattern::Animation(pattern, speed) => {
                 let idx = (t * *speed as f64) as usize % pattern.patterns.len();
                 let pattern = &pattern.patterns[idx];
                 *pattern
             }
-            RunEffect::ReverseAnimationPattern(pattern, speed) => {
+            Pattern::AnimationReverse(pattern, speed) => {
                 let idx = (t * *speed as f64) as usize % pattern.patterns.len();
                 let pattern = &pattern.patterns[pattern.patterns.len() - idx - 1];
                 *pattern
             }
-            RunEffect::AnimationRandom(pattern) => {
+            Pattern::AnimationRandom(pattern) => {
                 let idx = renderman.rng.gen_range(0..pattern.patterns.len());
                 let pattern = &pattern.patterns[idx];
                 *pattern

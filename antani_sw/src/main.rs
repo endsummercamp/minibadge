@@ -17,7 +17,6 @@ use embassy_rp::pio::{InterruptHandler, Pio};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
 use embassy_sync::channel::{Channel, Sender};
-use embassy_sync::lazy_lock::LazyLock;
 use embassy_time::with_timeout;
 use embassy_time::Instant;
 use embassy_time::{Duration, Ticker, Timer};
@@ -28,6 +27,7 @@ use infrared::{protocol::Nec, Receiver};
 use panic_probe as _;
 
 mod rgbeffects;
+mod scenes;
 mod ws2812;
 
 bind_interrupts!(struct Irqs {
@@ -37,13 +37,11 @@ bind_interrupts!(struct Irqs {
 
 use rand::rngs::SmallRng;
 use rand::SeedableRng;
-use rgbeffects::AnimationPattern;
 use rgbeffects::ColorPalette;
 use rgbeffects::FragmentShader;
-use rgbeffects::LedPattern;
+use rgbeffects::Pattern;
 use rgbeffects::RenderCommand;
 use rgbeffects::RenderManager;
-use rgbeffects::RunEffect;
 use smart_leds::RGB8;
 use ws2812::Ws2812;
 
@@ -65,44 +63,50 @@ static GAMMA_CORRECTION: [u8; 256] = [
     223, 225, 228, 231, 233, 236, 239, 241, 244, 247, 249, 252, 255,
 ];
 
-struct LedFramebuffer {
-    framebuffer: [RGB8; LED_MATRIX_SIZE],
+struct RawFramebuffer<T>
+where
+    T: Default + Copy,
+{
+    framebuffer: [T; LED_MATRIX_SIZE],
 }
 
-impl LedFramebuffer {
-    const fn new() -> Self {
+impl<T> RawFramebuffer<T>
+where
+    T: Default + Copy,
+{
+    fn new() -> Self {
         Self {
-            framebuffer: [RGB8 { r: 0, g: 0, b: 0 }; LED_MATRIX_SIZE],
+            framebuffer: [T::default(); LED_MATRIX_SIZE],
         }
     }
 
-    fn set_pixel(&mut self, x: usize, y: usize, colour: RGB8) {
+    fn set_pixel(&mut self, x: usize, y: usize, colour: T) {
         if x < LED_MATRIX_WIDTH && y < LED_MATRIX_HEIGHT {
             self.framebuffer[y * LED_MATRIX_WIDTH + x] = colour;
         }
     }
 
-    fn get_pixel(&self, x: usize, y: usize) -> RGB8 {
+    fn get_pixel(&self, x: usize, y: usize) -> T {
         if x < LED_MATRIX_WIDTH && y < LED_MATRIX_HEIGHT {
             self.framebuffer[y * LED_MATRIX_WIDTH + x]
         } else {
-            RGB8 { r: 0, g: 0, b: 0 }
+            T::default()
         }
     }
 
-    fn set_all(&mut self, rgb: RGB8) {
+    fn set_all(&mut self, rgb: T) {
         for i in 0..LED_MATRIX_SIZE {
             self.framebuffer[i] = rgb;
         }
     }
 
-    fn get_raw(&self) -> &[RGB8; LED_MATRIX_SIZE] {
+    fn get_raw(&self) -> &[T; LED_MATRIX_SIZE] {
         &self.framebuffer
     }
 }
 
 struct LedMatrix {
-    raw_framebuffer: LedFramebuffer,
+    raw_framebuffer: RawFramebuffer<RGB8>,
     corrected_gain: f32,
     raw_gain: f32,
 }
@@ -110,7 +114,7 @@ struct LedMatrix {
 impl LedMatrix {
     fn new() -> Self {
         Self {
-            raw_framebuffer: LedFramebuffer::new(),
+            raw_framebuffer: RawFramebuffer::new(),
             corrected_gain: 1.0,
             raw_gain: 1.0,
         }
@@ -180,58 +184,6 @@ enum HighLevelCommand {
     DecreaseBrightness,
 }
 
-struct Patterns {
-    pub power_100: LedPattern,
-    pub power_75: LedPattern,
-    pub power_50: LedPattern,
-    pub power_25: LedPattern,
-    pub glider: LedPattern,
-    pub all_on: LedPattern,
-    pub vertical_stripe_1: LedPattern,
-    pub vertical_stripe_2: LedPattern,
-    pub vertical_stripe_3: LedPattern,
-    pub everything_once: AnimationPattern,
-    pub boot_animation: AnimationPattern,
-}
-
-static PATTERNS: LazyLock<Patterns> = LazyLock::new(|| Patterns {
-    // patterns for light power
-    power_100: LedPattern::new(0b111111111),
-    power_75: LedPattern::new(0b000111111),
-    power_50: LedPattern::new(0b000000111),
-    power_25: LedPattern::new(0b000000001),
-
-    glider: LedPattern::new(0b010001111),
-    all_on: LedPattern::new(0b111111111),
-    vertical_stripe_1: LedPattern::new(0b100100100),
-    vertical_stripe_2: LedPattern::new(0b010010010),
-    vertical_stripe_3: LedPattern::new(0b001001001),
-
-    everything_once: AnimationPattern::new(&[
-        0b100000000,
-        0b010000000,
-        0b001000000,
-        0b000100000,
-        0b000010000,
-        0b000001000,
-        0b000000100,
-        0b000000010,
-        0b000000001,
-    ]),
-    boot_animation: AnimationPattern::new(&[
-        0b010000000,
-        0b010010000,
-        0b111111000,
-        0b000111111,
-        0b000000111,
-        0b000000010,
-        0b000000000,
-        0b000000000,
-        0b000000000,
-        0b000000000,
-    ]),
-});
-
 // if we need to override the normal rendering with a special effect, we use this enum
 #[derive(Clone)]
 enum WorkingMode {
@@ -286,16 +238,16 @@ async fn main(spawner: Spawner) {
     };
     let mut ws2812 = Ws2812::new(&mut common, sm0, p.DMA_CH0, p.PIN_19);
 
-    let patterns = PATTERNS.get();
+    let patterns = scenes::PATTERNS.get();
 
     // override normal rendering with a special effect, if needed
     let mut working_mode = WorkingMode::SpecialTimeout(
         RenderCommand {
-            effect: RunEffect::AnimationPattern(
+            effect: Pattern::Animation(
                 &patterns.boot_animation,
                 (patterns.boot_animation.len() as f32) * 2.0,
             ),
-            color: ColorPalette::Rainbow(1.0, 0.0),
+            color: ColorPalette::Rainbow(1.0),
             pattern_shaders: Vec::from_slice(&[FragmentShader::LowPassWithPeak(50.0)]).unwrap(),
             ..Default::default()
         },
@@ -315,7 +267,7 @@ async fn main(spawner: Spawner) {
         out_power = OutputPower::High; // just to not forget to put this at the max value
 
         working_mode = WorkingMode::Special(RenderCommand {
-            effect: RunEffect::SimplePattern(patterns.all_on),
+            effect: Pattern::Simple(patterns.all_on),
             color: ColorPalette::Solid((255, 255, 255).into()),
             ..Default::default()
         });
@@ -329,151 +281,7 @@ async fn main(spawner: Spawner) {
     let highpriority_spawner = EXECUTOR_HIGH.start(interrupt::SWI_IRQ_1);
     unwrap!(highpriority_spawner.spawn(ir_receiver(ir_sensor, CHANNEL.sender())));
 
-    let scenes: Vec<Vec<RenderCommand, 8>, 20> = Vec::from_slice(&[
-        // normal glider
-        Vec::from_slice(&[RenderCommand {
-            effect: RunEffect::SimplePattern(patterns.glider),
-            color: ColorPalette::Solid((0, 0, 255).into()),
-            ..Default::default()
-        }])
-        .unwrap(),
-        // breathing glider
-        Vec::from_slice(&[RenderCommand {
-            effect: RunEffect::SimplePattern(patterns.glider),
-            color: ColorPalette::Solid((0, 0, 255).into()),
-            pattern_shaders: Vec::from_slice(&[FragmentShader::Breathing(0.7)]).unwrap(),
-            ..Default::default()
-        }])
-        .unwrap(),
-        // strobing glider
-        Vec::from_slice(&[RenderCommand {
-            effect: RunEffect::SimplePattern(patterns.glider),
-            color: ColorPalette::Solid((0, 0, 255).into()),
-            pattern_shaders: Vec::from_slice(&[
-                FragmentShader::Breathing(0.7),
-                FragmentShader::Blinking(10.0),
-            ])
-            .unwrap(),
-            ..Default::default()
-        }])
-        .unwrap(),
-        // glider with particles
-        Vec::from_slice(&[
-            RenderCommand {
-                effect: RunEffect::SimplePattern(patterns.glider),
-                color: ColorPalette::Solid((0, 0, 255).into()),
-                pattern_shaders: Vec::from_slice(&[FragmentShader::Breathing(0.7)]).unwrap(),
-                ..Default::default()
-            },
-            RenderCommand {
-                effect: RunEffect::AnimationPattern(&patterns.everything_once, 6.0),
-                color: ColorPalette::Rainbow(0.25, 0.0),
-                ..Default::default()
-            },
-            RenderCommand {
-                effect: RunEffect::ReverseAnimationPattern(&patterns.everything_once, 6.0),
-                color: ColorPalette::Rainbow(0.25, 0.5),
-                ..Default::default()
-            },
-        ])
-        .unwrap(),
-        // italy flag
-        Vec::from_slice(&[
-            RenderCommand {
-                effect: RunEffect::SimplePattern(patterns.vertical_stripe_1),
-                color: ColorPalette::Solid((0, 255, 0).into()),
-                ..Default::default()
-            },
-            RenderCommand {
-                effect: RunEffect::SimplePattern(patterns.vertical_stripe_2),
-                color: ColorPalette::Solid((255, 255, 255).into()),
-                ..Default::default()
-            },
-            RenderCommand {
-                effect: RunEffect::SimplePattern(patterns.vertical_stripe_3),
-                color: ColorPalette::Solid((255, 0, 0).into()),
-                ..Default::default()
-            },
-        ])
-        .unwrap(),
-        // single rainbow glider
-        Vec::from_slice(&[RenderCommand {
-            effect: RunEffect::SimplePattern(patterns.glider),
-            color: ColorPalette::Rainbow(0.25, 0.0),
-            ..Default::default()
-        }])
-        .unwrap(),
-        // double rainbow glider
-        Vec::from_slice(&[
-            RenderCommand {
-                effect: RunEffect::SimplePattern(patterns.all_on),
-                color: ColorPalette::Rainbow(0.25, 0.0),
-                ..Default::default()
-            },
-            RenderCommand {
-                effect: RunEffect::SimplePattern(patterns.glider),
-                color: ColorPalette::Rainbow(0.25, 0.5),
-                ..Default::default()
-            },
-        ])
-        .unwrap(),
-        // solid red
-        Vec::from_slice(&[RenderCommand {
-            effect: RunEffect::SimplePattern(patterns.all_on),
-            color: ColorPalette::Solid((255, 0, 0).into()),
-            ..Default::default()
-        }])
-        .unwrap(),
-        // solid green
-        Vec::from_slice(&[RenderCommand {
-            effect: RunEffect::SimplePattern(patterns.all_on),
-            color: ColorPalette::Solid((0, 255, 0).into()),
-            ..Default::default()
-        }])
-        .unwrap(),
-        // solid blue
-        Vec::from_slice(&[RenderCommand {
-            effect: RunEffect::SimplePattern(patterns.all_on),
-            color: ColorPalette::Solid((0, 0, 255).into()),
-            ..Default::default()
-        }])
-        .unwrap(),
-        // solid white
-        Vec::from_slice(&[RenderCommand {
-            effect: RunEffect::SimplePattern(patterns.all_on),
-            color: ColorPalette::Solid((255, 255, 255).into()),
-            ..Default::default()
-        }])
-        .unwrap(),
-        // police lights
-        Vec::from_slice(&[RenderCommand {
-            effect: RunEffect::SimplePattern(patterns.all_on),
-            color: ColorPalette::Custom(
-                Vec::from_slice(&[
-                    (0, 0, 0).into(),
-                    (255, 0, 0).into(),
-                    (0, 0, 0).into(),
-                    (255, 0, 0).into(),
-                    (0, 0, 0).into(),
-                    (0, 0, 0).into(),
-                    (0, 0, 0).into(),
-                    (0, 0, 0).into(),
-                    (0, 0, 255).into(),
-                    (0, 0, 0).into(),
-                    (0, 0, 255).into(),
-                    (0, 0, 0).into(),
-                    (0, 0, 0).into(),
-                    (0, 0, 0).into(),
-                    (0, 0, 0).into(),
-                ])
-                .unwrap(),
-                15.0,
-            ),
-            ..Default::default()
-        }])
-        .unwrap(),
-    ])
-    .unwrap();
+    let scenes = scenes::scenes();
 
     println!("Starting loop");
 
@@ -562,7 +370,7 @@ async fn main(spawner: Spawner) {
 
                 working_mode = WorkingMode::SpecialTimeout(
                     RenderCommand {
-                        effect: RunEffect::SimplePattern(patt),
+                        effect: Pattern::Simple(patt),
                         color: ColorPalette::Solid((255, 255, 255).into()),
                         ..Default::default()
                     },
@@ -575,17 +383,17 @@ async fn main(spawner: Spawner) {
 
         match &working_mode {
             WorkingMode::Normal => {
-                renderman.render(&scenes[scene_id], t);
+                renderman.render(&scenes[scene_id], t).await;
             }
             WorkingMode::SpecialTimeout(scene, timeout) => {
-                renderman.render(&[scene.clone()], t);
+                renderman.render(&[scene.clone()], t).await;
 
                 if t > *timeout {
                     working_mode = WorkingMode::Normal;
                 }
             }
             WorkingMode::Special(scene) => {
-                renderman.render(&[scene.clone()], t);
+                renderman.render(&[scene.clone()], t).await;
             }
         }
 
