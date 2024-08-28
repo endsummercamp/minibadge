@@ -396,17 +396,17 @@ async fn main(spawner: Spawner) {
 
         match &working_mode {
             WorkingMode::Normal => {
-                renderman.render(&scenes[scene_id], t).await;
+                renderman.render(&scenes[scene_id], t);
             }
             WorkingMode::SpecialTimeout(scene, timeout) => {
-                renderman.render(&[scene.clone()], t).await;
+                renderman.render(&[scene.clone()], t);
 
                 if t > *timeout {
                     working_mode = WorkingMode::Normal;
                 }
             }
             WorkingMode::Special(scene) => {
-                renderman.render(&[scene.clone()], t).await;
+                renderman.render(&[scene.clone()], t);
             }
         }
 

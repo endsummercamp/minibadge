@@ -1,5 +1,4 @@
 use core::f64;
-use embassy_sync::{blocking_mutex::raw::ThreadModeRawMutex, mutex::Mutex};
 use heapless::Vec;
 use num_traits::real::Real;
 use rand::{rngs::SmallRng, Rng};
@@ -62,7 +61,7 @@ pub struct RenderManager {
 }
 
 impl RenderManager {
-    async fn render_single(&mut self, command: &RenderCommand, t: f64) {
+    fn render_single(&mut self, command: &RenderCommand, t: f64) {
         let t = t + command.time_offset;
         let startcolor = command.color.render(t);
 
@@ -87,7 +86,7 @@ impl RenderManager {
                 let mut color = startcolor;
 
                 for shader in command.pattern_shaders.iter() {
-                    color = shader.render(t, color, *x, *y, self).await;
+                    color = shader.render(t, color, *x, *y, self);
                 }
 
                 self.mtrx.set_pixel(*x, *y, color);
@@ -95,15 +94,15 @@ impl RenderManager {
 
             for shader in command.screen_shaders.iter() {
                 let mut color = self.mtrx.get_pixel(*x, *y);
-                color = shader.render(t, color, *x, *y, self).await;
+                color = shader.render(t, color, *x, *y, self);
                 self.mtrx.set_pixel(*x, *y, color);
             }
         }
     }
 
-    pub async fn render(&mut self, command: &[RenderCommand], t: f64) {
+    pub fn render(&mut self, command: &[RenderCommand], t: f64) {
         for c in command.iter() {
-            self.render_single(c, t).await;
+            self.render_single(c, t);
         }
     }
 }
@@ -141,7 +140,7 @@ pub enum FragmentShader {
 }
 
 impl FragmentShader {
-    async fn render(
+    fn render(
         &self,
         t: f64,
         color: RGB8,
