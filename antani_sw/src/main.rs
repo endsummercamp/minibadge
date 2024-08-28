@@ -28,6 +28,7 @@ use panic_probe as _;
 
 mod rgbeffects;
 mod scenes;
+mod usb;
 mod ws2812;
 
 bind_interrupts!(struct Irqs {
@@ -187,6 +188,7 @@ enum TaskCommand {
     IrCommand(u8, u8, bool),        // add, cmd, repeat
     ShortButtonPress,
     LongButtonPress,
+    MidiSetPixel(u8, u8, u8, u8), // x y channel (0=r 1=g 2=b) value
 }
 static CHANNEL: Channel<CriticalSectionRawMutex, TaskCommand, 8> = Channel::new();
 
@@ -202,6 +204,7 @@ enum WorkingMode {
     Normal,                             // normal rendering, user selecting the patterns etc
     Special(RenderCommand), // override normal rendering until the user presses the button
     SpecialTimeout(RenderCommand, f64), // override normal rendering until the timeout
+    RawFramebuffer(RawFramebuffer<RGB8>),
 }
 #[derive(Clone)]
 enum OutputPower {
@@ -244,6 +247,9 @@ async fn main(spawner: Spawner) {
     let ts = adc::Channel::new_temp_sensor(p.ADC_TEMP_SENSOR);
     unwrap!(spawner.spawn(temperature(adc, ts, CHANNEL.sender())));
 
+    let mut midi_framebuffer = RawFramebuffer::new();
+    unwrap!(spawner.spawn(usb::usb_main(p.USB, CHANNEL.sender())));
+
     let mut renderman = RenderManager {
         mtrx: LedMatrix::new(),
         rng: SmallRng::seed_from_u64(69420),
@@ -268,7 +274,7 @@ async fn main(spawner: Spawner) {
     );
 
     let mut scene_id = 0;
-    let mut out_power = OutputPower::Medium;
+    let mut out_power = OutputPower::High;
 
     // let mut ir_blaster = pins.gpio11.into_push_pull_output();
     let ir_sensor = Input::new(p.PIN_10, Pull::None);
@@ -354,6 +360,21 @@ async fn main(spawner: Spawner) {
                     println!("Long button press");
                     hlcommand = Some(HighLevelCommand::DecreaseBrightness);
                 }
+
+                TaskCommand::MidiSetPixel(x, y, channel, value) => {
+                    let px: RGB8 = midi_framebuffer.get_pixel(x as usize, y as usize);
+
+                    let rgb = match channel {
+                        0 => (value, px.g, px.b).into(),
+                        1 => (px.r, value, px.b).into(),
+                        2 => (px.r, px.g, value).into(),
+                        _ => px,
+                    };
+
+                    midi_framebuffer.set_pixel(x as usize, y as usize, rgb);
+
+                    working_mode = WorkingMode::RawFramebuffer(midi_framebuffer);
+                }
             }
         }
 
@@ -381,14 +402,18 @@ async fn main(spawner: Spawner) {
                     OutputPower::NighMode => patterns.power_25,
                 };
 
-                working_mode = WorkingMode::SpecialTimeout(
-                    RenderCommand {
-                        effect: Pattern::Simple(patt),
-                        color: ColorPalette::Solid((255, 255, 255).into()),
-                        ..Default::default()
-                    },
-                    t + 1.0,
-                );
+                // we show the animation only if we are in normal mode
+                // otherwise we will ruin i.e. the midi framebuffer
+                if matches!(working_mode, WorkingMode::Normal) {
+                    working_mode = WorkingMode::SpecialTimeout(
+                        RenderCommand {
+                            effect: Pattern::Simple(patt),
+                            color: ColorPalette::Solid((255, 255, 255).into()),
+                            ..Default::default()
+                        },
+                        t + 1.0,
+                    );
+                }
             }
 
             None => {}
@@ -407,6 +432,9 @@ async fn main(spawner: Spawner) {
             }
             WorkingMode::Special(scene) => {
                 renderman.render(&[scene.clone()], t);
+            }
+            WorkingMode::RawFramebuffer(fb) => {
+                renderman.mtrx.raw_framebuffer = *fb;
             }
         }
 
