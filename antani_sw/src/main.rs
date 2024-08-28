@@ -257,7 +257,7 @@ async fn main(spawner: Spawner) {
     let mut working_mode = WorkingMode::SpecialTimeout(
         RenderCommand {
             effect: Pattern::Animation(
-                &patterns.boot_animation,
+                patterns.boot_animation,
                 (patterns.boot_animation.len() as f32) * 2.0,
             ),
             color: ColorPalette::Rainbow(1.0),

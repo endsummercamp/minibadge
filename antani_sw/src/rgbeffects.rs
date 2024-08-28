@@ -6,38 +6,7 @@ use smart_leds::RGB8;
 
 use crate::{LedMatrix, RawFramebuffer};
 
-#[derive(Clone, Copy)]
-pub struct LedPattern {
-    pub pattern: u16,
-}
-
-impl LedPattern {
-    pub const fn new(pattern: u16) -> Self {
-        Self { pattern }
-    }
-}
-
-impl From<u16> for LedPattern {
-    fn from(pattern: u16) -> Self {
-        Self { pattern }
-    }
-}
-
-pub struct AnimationPattern {
-    patterns: Vec<LedPattern, 20>,
-}
-
-impl AnimationPattern {
-    pub fn new(patterns: &[u16]) -> Self {
-        Self {
-            patterns: patterns.iter().map(|&p| LedPattern::new(p)).collect(),
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        self.patterns.len()
-    }
-}
+pub type LedPattern = u16;
 
 #[derive(Clone, Default)]
 pub struct RenderCommand {
@@ -82,7 +51,7 @@ impl RenderManager {
 
         for (i, (x, y)) in bit_offsets.iter().enumerate() {
             // if a pixel is outside of the pattern, I still expect screen-space shaders to be applied to it
-            if pattern.pattern & (1 << i) != 0 {
+            if pattern & (1 << i) != 0 {
                 let mut color = startcolor;
 
                 for shader in command.pattern_shaders.iter() {
@@ -242,14 +211,14 @@ impl ColorPalette {
 #[derive(Clone)]
 pub enum Pattern {
     Simple(LedPattern),
-    Animation(&'static AnimationPattern, f32), // pattern, speed
-    AnimationReverse(&'static AnimationPattern, f32), // pattern, speed
-    AnimationRandom(&'static AnimationPattern, u16), // pattern, decimation
+    Animation(&'static [LedPattern], f32), // pattern, speed
+    AnimationReverse(&'static [LedPattern], f32), // pattern, speed
+    AnimationRandom(&'static [LedPattern], u16), // pattern, decimation
 }
 
 impl Default for Pattern {
     fn default() -> Self {
-        Pattern::Simple(LedPattern::new(0b111111111))
+        Pattern::Simple(0b111111111)
     }
 }
 
@@ -258,13 +227,13 @@ impl Pattern {
         match self {
             Pattern::Simple(pattern) => *pattern,
             Pattern::Animation(pattern, speed) => {
-                let idx = (t * *speed as f64) as usize % pattern.patterns.len();
-                let pattern = &pattern.patterns[idx];
+                let idx = (t * *speed as f64) as usize % pattern.len();
+                let pattern = &pattern[idx];
                 *pattern
             }
             Pattern::AnimationReverse(pattern, speed) => {
-                let idx = (t * *speed as f64) as usize % pattern.patterns.len();
-                let pattern = &pattern.patterns[pattern.patterns.len() - idx - 1];
+                let idx = (t * *speed as f64) as usize % pattern.len();
+                let pattern = &pattern[pattern.len() - idx - 1];
                 *pattern
             }
             Pattern::AnimationRandom(pattern, decimation) => {
@@ -274,11 +243,11 @@ impl Pattern {
                 renderman.persistent_data.frame_counter += 1;
 
                 if renderman.persistent_data.frame_counter % *decimation as u32 == 0 {
-                    let idx = renderman.rng.gen_range(0..pattern.patterns.len());
-                    let pattern = &pattern.patterns[idx];
+                    let idx = renderman.rng.gen_range(0..pattern.len());
+                    let pattern = &pattern[idx];
                     *pattern
                 } else {
-                    LedPattern::new(0)
+                    0
                 }
             }
         }

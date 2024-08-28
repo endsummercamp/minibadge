@@ -1,9 +1,7 @@
 use embassy_sync::lazy_lock::LazyLock;
 use heapless::Vec;
 
-use crate::rgbeffects::{
-    AnimationPattern, ColorPalette, FragmentShader, LedPattern, Pattern, RenderCommand,
-};
+use crate::rgbeffects::{ColorPalette, FragmentShader, LedPattern, Pattern, RenderCommand};
 
 pub struct Patterns {
     pub power_100: LedPattern,
@@ -15,24 +13,24 @@ pub struct Patterns {
     pub vertical_stripe_1: LedPattern,
     pub vertical_stripe_2: LedPattern,
     pub vertical_stripe_3: LedPattern,
-    pub everything_once: AnimationPattern,
-    pub boot_animation: AnimationPattern,
+    pub everything_once: &'static [LedPattern],
+    pub boot_animation: &'static [LedPattern],
 }
 
 pub static PATTERNS: LazyLock<Patterns> = LazyLock::new(|| Patterns {
     // patterns for light power
-    power_100: LedPattern::new(0b111111111),
-    power_75: LedPattern::new(0b000111111),
-    power_50: LedPattern::new(0b000000111),
-    power_25: LedPattern::new(0b000000001),
+    power_100: 0b111111111,
+    power_75: 0b000111111,
+    power_50: 0b000000111,
+    power_25: 0b000000001,
 
-    glider: LedPattern::new(0b010001111),
-    all_on: LedPattern::new(0b111111111),
-    vertical_stripe_1: LedPattern::new(0b100100100),
-    vertical_stripe_2: LedPattern::new(0b010010010),
-    vertical_stripe_3: LedPattern::new(0b001001001),
+    glider: 0b010001111,
+    all_on: 0b111111111,
+    vertical_stripe_1: 0b100100100,
+    vertical_stripe_2: 0b010010010,
+    vertical_stripe_3: 0b001001001,
 
-    everything_once: AnimationPattern::new(&[
+    everything_once: &[
         0b100000000,
         0b010000000,
         0b001000000,
@@ -42,8 +40,8 @@ pub static PATTERNS: LazyLock<Patterns> = LazyLock::new(|| Patterns {
         0b000000100,
         0b000000010,
         0b000000001,
-    ]),
-    boot_animation: AnimationPattern::new(&[
+    ],
+    boot_animation: &[
         0b010000000,
         0b010010000,
         0b111111000,
@@ -54,7 +52,7 @@ pub static PATTERNS: LazyLock<Patterns> = LazyLock::new(|| Patterns {
         0b000000000,
         0b000000000,
         0b000000000,
-    ]),
+    ],
 });
 
 pub fn scenes() -> Vec<Vec<RenderCommand, 8>, 20> {
@@ -96,7 +94,7 @@ pub fn scenes() -> Vec<Vec<RenderCommand, 8>, 20> {
                 ..Default::default()
             },
             RenderCommand {
-                effect: Pattern::AnimationRandom(&patterns.everything_once, 300),
+                effect: Pattern::AnimationRandom(patterns.everything_once, 300),
                 color: ColorPalette::Rainbow(0.25),
                 screen_shaders: Vec::from_slice(&[FragmentShader::LowPassWithPeak(10000.0)])
                     .unwrap(),
