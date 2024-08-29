@@ -3,17 +3,19 @@
 
 use core::f64;
 
-use defmt::*;
-use defmt_rtt as _;
+use defmt::println;
+use defmt::unwrap;
 use embassy_executor::{InterruptExecutor, Spawner};
 use embassy_rp::adc;
 use embassy_rp::gpio::Input;
 use embassy_rp::gpio::Pull;
 use embassy_rp::interrupt;
 use embassy_rp::interrupt::{InterruptExt, Priority};
+use log::info;
 
 use embassy_rp::peripherals::PIO0;
 use embassy_rp::pio::{InterruptHandler, Pio};
+use embassy_rp::pwm;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
 use embassy_sync::channel::{Channel, Sender};
@@ -189,8 +191,13 @@ enum TaskCommand {
     ShortButtonPress,
     LongButtonPress,
     MidiSetPixel(u8, u8, u8, u8), // x y channel (0=r 1=g 2=b) value
+    SendIr(u8, u8, bool),
 }
 static CHANNEL: Channel<CriticalSectionRawMutex, TaskCommand, 8> = Channel::new();
+static IR_BLASTER_CHANNEL: Channel<CriticalSectionRawMutex, (u8, u8, bool), 8> = Channel::new();
+
+type IrChanReceiver =
+    embassy_sync::channel::Receiver<'static, CriticalSectionRawMutex, (u8, u8, bool), 8>;
 
 enum HighLevelCommand {
     NextPattern,
@@ -237,6 +244,7 @@ impl OutputPower {
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     info!("Program start");
+    println!("Program start");
     let p = embassy_rp::init(Default::default());
 
     let Pio {
@@ -259,24 +267,21 @@ async fn main(spawner: Spawner) {
 
     let patterns = scenes::PATTERNS.get();
 
+    let boot_animation = RenderCommand {
+        effect: Pattern::Animation(
+            patterns.boot_animation,
+            (patterns.boot_animation.len() as f32) * 2.0,
+        ),
+        color: ColorPalette::Rainbow(1.0),
+        pattern_shaders: Vec::from_slice(&[FragmentShader::LowPassWithPeak(50.0)]).unwrap(),
+        ..Default::default()
+    };
     // override normal rendering with a special effect, if needed
-    let mut working_mode = WorkingMode::SpecialTimeout(
-        RenderCommand {
-            effect: Pattern::Animation(
-                patterns.boot_animation,
-                (patterns.boot_animation.len() as f32) * 2.0,
-            ),
-            color: ColorPalette::Rainbow(1.0),
-            pattern_shaders: Vec::from_slice(&[FragmentShader::LowPassWithPeak(50.0)]).unwrap(),
-            ..Default::default()
-        },
-        0.5,
-    );
+    let mut working_mode = WorkingMode::SpecialTimeout(boot_animation.clone(), 0.5);
 
     let mut scene_id = 0;
     let mut out_power = OutputPower::High;
 
-    // let mut ir_blaster = pins.gpio11.into_push_pull_output();
     let ir_sensor = Input::new(p.PIN_10, Pull::None);
     let mut user_button = Input::new(p.PIN_9, Pull::Up);
 
@@ -300,9 +305,18 @@ async fn main(spawner: Spawner) {
     let highpriority_spawner = EXECUTOR_HIGH.start(interrupt::SWI_IRQ_1);
     unwrap!(highpriority_spawner.spawn(ir_receiver(ir_sensor, CHANNEL.sender())));
 
+    let mut pwm_cfg: pwm::Config = Default::default();
+    pwm_cfg.enable = false;
+    let ir_blaster = pwm::Pwm::new_output_b(p.PWM_SLICE5, p.PIN_11, pwm_cfg);
+    unwrap!(highpriority_spawner.spawn(ir_blaster_tsk(ir_blaster, IR_BLASTER_CHANNEL.receiver())));
+
     let scenes = scenes::scenes();
 
-    println!("Starting loop");
+    info!("Starting loop");
+    CHANNEL
+        .sender()
+        .send(TaskCommand::SendIr(0, 66, false))
+        .await;
 
     let mut timer_offset = 0.0;
     loop {
@@ -322,12 +336,15 @@ async fn main(spawner: Spawner) {
             match ch {
                 TaskCommand::ThermalThrottleMultiplier(gain) => {
                     renderman.mtrx.set_raw_gain(gain);
-                    println!("Thermal throttle multiplier: {}", gain);
+                    if gain < 1.0 {
+                        info!("Thermal throttle multiplier: {}", gain);
+                    }
                 }
                 TaskCommand::IrCommand(addr, cmd, repeat) => {
-                    println!("IR command: {} {} {}", addr, cmd, repeat);
+                    info!("IR command: {} {} {}", addr, cmd, repeat);
 
                     match (addr, cmd, repeat) {
+                        // all those are commands of the chinese ir rgb remote
                         (0, 70, false) => {
                             hlcommand = Some(HighLevelCommand::DecreaseBrightness);
                         }
@@ -348,16 +365,29 @@ async fn main(spawner: Spawner) {
                             // animations
                             hlcommand = Some(HighLevelCommand::NextPattern);
                         }
+                        // END of ir command from the chinese remote
+
+                        // startup ir command sent by another badge
+                        // say hi to the other badge
+                        (0, 66, false) => {
+                            // we do this so the animation starts in the correct time
+                            timer_offset = Instant::now().as_micros() as f64 / 1_000_000.0;
+
+                            working_mode = WorkingMode::SpecialTimeout(boot_animation.clone(), 0.5);
+                            // we short circuit the main loop so the timer_offset is put in the correct place
+                            // this is a bit of an hack, probably needs some rework on the time keeping
+                            continue;
+                        }
 
                         _ => {}
                     }
                 }
                 TaskCommand::ShortButtonPress => {
-                    println!("Short button press");
+                    info!("Short button press");
                     hlcommand = Some(HighLevelCommand::NextPattern);
                 }
                 TaskCommand::LongButtonPress => {
-                    println!("Long button press");
+                    info!("Long button press");
                     hlcommand = Some(HighLevelCommand::DecreaseBrightness);
                 }
 
@@ -374,6 +404,10 @@ async fn main(spawner: Spawner) {
                     midi_framebuffer.set_pixel(x as usize, y as usize, rgb);
 
                     working_mode = WorkingMode::RawFramebuffer(midi_framebuffer);
+                }
+
+                TaskCommand::SendIr(addr, cmd, repeat) => {
+                    IR_BLASTER_CHANNEL.try_send((addr, cmd, repeat)).unwrap();
                 }
             }
         }
@@ -402,9 +436,8 @@ async fn main(spawner: Spawner) {
                     OutputPower::NighMode => patterns.power_25,
                 };
 
-                // we show the animation only if we are in normal mode
-                // otherwise we will ruin i.e. the midi framebuffer
-                if matches!(working_mode, WorkingMode::Normal) {
+                // do not ruin the midi framebuffer
+                if !matches!(working_mode, WorkingMode::RawFramebuffer(_)) {
                     working_mode = WorkingMode::SpecialTimeout(
                         RenderCommand {
                             effect: Pattern::Simple(patt),
@@ -467,6 +500,56 @@ async fn ir_receiver(ir_sensor: Input<'static>, control: AppSender) {
             control
                 .send(TaskCommand::IrCommand(cmd.addr, cmd.cmd, cmd.repeat))
                 .await;
+        }
+    }
+}
+
+#[embassy_executor::task]
+async fn ir_blaster_tsk(mut ir_blaster: pwm::Pwm<'static>, receiver: IrChanReceiver) {
+    use infrared::sender::Status;
+
+    loop {
+        let (addr, cmd, repeat) = receiver.receive().await;
+        const FREQUENCY: u32 = 20000;
+
+        let mut buffer: infrared::sender::PulsedataSender<128> =
+            infrared::sender::PulsedataSender::new();
+
+        let cmd = infrared::protocol::nec::NecCommand { addr, cmd, repeat };
+        buffer.load_command::<Nec, FREQUENCY>(&cmd);
+        let mut counter = 0;
+
+        let mut pwm_cfg: pwm::Config = Default::default();
+        pwm_cfg.enable = false;
+        // system clock is 125MHz
+        // we need to do 38khz, so 125_000_000 / 38_000 = 3289
+        pwm_cfg.top = (125_000_000 / 38_000) as u16;
+        pwm_cfg.compare_b = pwm_cfg.top / 2;
+
+        let mut ticker = Ticker::every(Duration::from_hz(FREQUENCY as u64));
+        loop {
+            let status: infrared::sender::Status = buffer.tick(counter);
+            counter = counter.wrapping_add(1);
+
+            match status {
+                Status::Transmit(v) => {
+                    pwm_cfg.enable = v;
+                    ir_blaster.set_config(&pwm_cfg);
+                }
+                Status::Idle => {
+                    pwm_cfg.enable = false;
+                    ir_blaster.set_config(&pwm_cfg);
+                    break;
+                }
+                Status::Error => {
+                    log::error!("Error in IR blaster");
+                    pwm_cfg.enable = false;
+                    ir_blaster.set_config(&pwm_cfg);
+                    break;
+                }
+            };
+
+            ticker.next().await;
         }
     }
 }
