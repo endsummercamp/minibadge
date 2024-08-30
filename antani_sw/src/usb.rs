@@ -7,7 +7,7 @@ use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
 use log::info;
 use static_cell::StaticCell;
 
-use crate::AppSender;
+use crate::MegaPublisher;
 use embassy_usb::class::midi::MidiClass;
 use embassy_usb::driver::EndpointError;
 use embassy_usb::{Builder, Config};
@@ -25,7 +25,7 @@ static BOS_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
 static CONTROL_BUF: StaticCell<[u8; 64]> = StaticCell::new();
 
 #[embassy_executor::task]
-pub async fn usb_main(usb: USB, control: AppSender) {
+pub async fn usb_main(usb: USB, publisher: MegaPublisher) {
     // Create the driver, from the HAL.
     let driver = Driver::new(usb, Irqs);
 
@@ -75,7 +75,7 @@ pub async fn usb_main(usb: USB, control: AppSender) {
         loop {
             midi_class.wait_connection().await;
             info!("Connected");
-            let _ = midi_echo(&mut midi_class, control).await;
+            let _ = midi_echo(&mut midi_class, &publisher).await;
             info!("Disconnected");
         }
     };
@@ -105,7 +105,7 @@ impl From<EndpointError> for Disconnected {
 
 async fn midi_echo<'d, T: Instance + 'd>(
     class: &mut MidiClass<'d, Driver<'d, T>>,
-    control: AppSender,
+    publisher: &MegaPublisher,
 ) -> Result<(), Disconnected> {
     let mut buf = [0; 64];
     loop {
@@ -142,8 +142,8 @@ async fn midi_echo<'d, T: Instance + 'd>(
             let x = width - x - 1;
 
             // warning: midi values are 0-127, we need to double them to get 0-255
-            control
-                .send(crate::TaskCommand::MidiSetPixel(x, y, channel, value * 2))
+            publisher
+                .publish(crate::TaskCommand::MidiSetPixel(x, y, channel, value * 2))
                 .await;
         }
     }

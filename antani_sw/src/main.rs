@@ -11,6 +11,9 @@ use embassy_rp::gpio::Input;
 use embassy_rp::gpio::Pull;
 use embassy_rp::interrupt;
 use embassy_rp::interrupt::{InterruptExt, Priority};
+
+use embassy_sync::pubsub::PubSubChannel;
+use embassy_sync::pubsub::Publisher;
 use log::info;
 
 use embassy_rp::peripherals::PIO0;
@@ -18,7 +21,6 @@ use embassy_rp::pio::{InterruptHandler, Pio};
 use embassy_rp::pwm;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 
-use embassy_sync::channel::{Channel, Sender};
 use embassy_time::with_timeout;
 use embassy_time::Instant;
 use embassy_time::{Duration, Ticker, Timer};
@@ -184,7 +186,7 @@ impl LedMatrix {
     }
 }
 
-type AppSender = Sender<'static, CriticalSectionRawMutex, TaskCommand, 8>;
+#[derive(Debug, Clone)]
 enum TaskCommand {
     ThermalThrottleMultiplier(f32), // 1.0 = no throttle, 0.0 = full throttle
     IrCommand(u8, u8, bool),        // add, cmd, repeat
@@ -192,18 +194,17 @@ enum TaskCommand {
     LongButtonPress,
     MidiSetPixel(u8, u8, u8, u8), // x y channel (0=r 1=g 2=b) value
     SendIr(u8, u8, bool),
-}
-static CHANNEL: Channel<CriticalSectionRawMutex, TaskCommand, 8> = Channel::new();
-static IR_BLASTER_CHANNEL: Channel<CriticalSectionRawMutex, (u8, u8, bool), 8> = Channel::new();
-
-type IrChanReceiver =
-    embassy_sync::channel::Receiver<'static, CriticalSectionRawMutex, (u8, u8, bool), 8>;
-
-enum HighLevelCommand {
+    IrTxDone,
     NextPattern,
     IncreaseBrightness,
     DecreaseBrightness,
 }
+
+static MEGA_CHANNEL: PubSubChannel<CriticalSectionRawMutex, TaskCommand, 8, 4, 8> =
+    PubSubChannel::new();
+type MegaPublisher = Publisher<'static, CriticalSectionRawMutex, TaskCommand, 8, 4, 8>;
+type MegaSubscriber =
+    embassy_sync::pubsub::Subscriber<'static, CriticalSectionRawMutex, TaskCommand, 8, 4, 8>;
 
 // if we need to override the normal rendering with a special effect, we use this enum
 #[derive(Clone)]
@@ -253,10 +254,10 @@ async fn main(spawner: Spawner) {
 
     let adc = adc::Adc::new(p.ADC, Irqs, adc::Config::default());
     let ts = adc::Channel::new_temp_sensor(p.ADC_TEMP_SENSOR);
-    unwrap!(spawner.spawn(temperature(adc, ts, CHANNEL.sender())));
+    unwrap!(spawner.spawn(temperature(adc, ts, MEGA_CHANNEL.publisher().unwrap())));
 
     let mut midi_framebuffer = RawFramebuffer::new();
-    unwrap!(spawner.spawn(usb::usb_main(p.USB, CHANNEL.sender())));
+    unwrap!(spawner.spawn(usb::usb_main(p.USB, MEGA_CHANNEL.publisher().unwrap())));
 
     let mut renderman = RenderManager {
         mtrx: LedMatrix::new(),
@@ -299,28 +300,40 @@ async fn main(spawner: Spawner) {
         user_button.wait_for_high().await;
     }
 
-    unwrap!(spawner.spawn(button_driver(user_button, CHANNEL.sender())));
+    unwrap!(spawner.spawn(button_driver(
+        user_button,
+        MEGA_CHANNEL.publisher().unwrap()
+    )));
+
+    // infrared stuff
 
     interrupt::SWI_IRQ_1.set_priority(Priority::P3);
     let highpriority_spawner = EXECUTOR_HIGH.start(interrupt::SWI_IRQ_1);
-    unwrap!(highpriority_spawner.spawn(ir_receiver(ir_sensor, CHANNEL.sender())));
+    unwrap!(highpriority_spawner.spawn(ir_receiver(ir_sensor, MEGA_CHANNEL.publisher().unwrap())));
 
     let mut pwm_cfg: pwm::Config = Default::default();
     pwm_cfg.enable = false;
     let ir_blaster = pwm::Pwm::new_output_b(p.PWM_SLICE5, p.PIN_11, pwm_cfg);
-    unwrap!(highpriority_spawner.spawn(ir_blaster_tsk(ir_blaster, IR_BLASTER_CHANNEL.receiver())));
+    unwrap!(highpriority_spawner.spawn(ir_blaster_tsk(
+        ir_blaster,
+        MEGA_CHANNEL.subscriber().unwrap(),
+        MEGA_CHANNEL.publisher().unwrap()
+    )));
+
+    let mut is_transmitting = false;
 
     let scenes = scenes::scenes();
 
+    let mega_publisher = MEGA_CHANNEL.publisher().unwrap();
+    let mut mega_subscriber = MEGA_CHANNEL.subscriber().unwrap();
+
     info!("Starting loop");
-    CHANNEL
-        .sender()
-        .send(TaskCommand::SendIr(0, 66, false))
+    mega_publisher
+        .publish(TaskCommand::SendIr(0, 66, false))
         .await;
 
     let mut timer_offset = 0.0;
     loop {
-        //t = timer.get_counter().ticks() as f64 / 1_000_000.0;
         let t = Instant::now().as_micros() as f64 / 1_000_000.0 - timer_offset;
 
         match out_power {
@@ -330,10 +343,8 @@ async fn main(spawner: Spawner) {
             OutputPower::NighMode => renderman.mtrx.set_gain(0.25),
         }
 
-        let mut hlcommand = None;
-
-        if let Ok(ch) = CHANNEL.try_receive() {
-            match ch {
+        if let Some(message) = mega_subscriber.try_next_message_pure() {
+            match message {
                 TaskCommand::ThermalThrottleMultiplier(gain) => {
                     renderman.mtrx.set_raw_gain(gain);
                     if gain < 1.0 {
@@ -343,13 +354,22 @@ async fn main(spawner: Spawner) {
                 TaskCommand::IrCommand(addr, cmd, repeat) => {
                     info!("IR command: {} {} {}", addr, cmd, repeat);
 
+                    if is_transmitting {
+                        info!("Ignoring IR command, we are transmitting");
+                        continue;
+                    }
+
                     match (addr, cmd, repeat) {
                         // all those are commands of the chinese ir rgb remote
                         (0, 70, false) => {
-                            hlcommand = Some(HighLevelCommand::DecreaseBrightness);
+                            mega_publisher
+                                .publish(TaskCommand::DecreaseBrightness)
+                                .await;
                         }
                         (0, 69, false) => {
-                            hlcommand = Some(HighLevelCommand::IncreaseBrightness);
+                            mega_publisher
+                                .publish(TaskCommand::IncreaseBrightness)
+                                .await;
                         }
 
                         (0, 71, false) => { // off
@@ -363,7 +383,7 @@ async fn main(spawner: Spawner) {
 
                         (0, 68, false) => {
                             // animations
-                            hlcommand = Some(HighLevelCommand::NextPattern);
+                            mega_publisher.publish(TaskCommand::NextPattern).await;
                         }
                         // END of ir command from the chinese remote
 
@@ -384,11 +404,13 @@ async fn main(spawner: Spawner) {
                 }
                 TaskCommand::ShortButtonPress => {
                     info!("Short button press");
-                    hlcommand = Some(HighLevelCommand::NextPattern);
+                    mega_publisher.publish(TaskCommand::NextPattern).await;
                 }
                 TaskCommand::LongButtonPress => {
                     info!("Long button press");
-                    hlcommand = Some(HighLevelCommand::DecreaseBrightness);
+                    mega_publisher
+                        .publish(TaskCommand::DecreaseBrightness)
+                        .await;
                 }
 
                 TaskCommand::MidiSetPixel(x, y, channel, value) => {
@@ -406,50 +428,49 @@ async fn main(spawner: Spawner) {
                     working_mode = WorkingMode::RawFramebuffer(midi_framebuffer);
                 }
 
-                TaskCommand::SendIr(addr, cmd, repeat) => {
-                    IR_BLASTER_CHANNEL.try_send((addr, cmd, repeat)).unwrap();
+                TaskCommand::SendIr(_, _, _) => {
+                    is_transmitting = true;
+                }
+
+                TaskCommand::IrTxDone => {
+                    is_transmitting = false;
+                }
+
+                TaskCommand::NextPattern => {
+                    if let WorkingMode::Normal = working_mode {
+                        scene_id = (scene_id + 1) % scenes.len();
+                    } else {
+                        working_mode = WorkingMode::Normal;
+                    }
+                }
+
+                TaskCommand::IncreaseBrightness | TaskCommand::DecreaseBrightness => {
+                    if let TaskCommand::DecreaseBrightness = message {
+                        out_power = out_power.decrease();
+                    } else {
+                        out_power = out_power.increase();
+                    }
+
+                    let patt = match out_power {
+                        OutputPower::High => patterns.power_100,
+                        OutputPower::Medium => patterns.power_75,
+                        OutputPower::Low => patterns.power_50,
+                        OutputPower::NighMode => patterns.power_25,
+                    };
+
+                    // do not ruin the midi framebuffer
+                    if !matches!(working_mode, WorkingMode::RawFramebuffer(_)) {
+                        working_mode = WorkingMode::SpecialTimeout(
+                            RenderCommand {
+                                effect: Pattern::Simple(patt),
+                                color: ColorPalette::Solid((255, 255, 255).into()),
+                                ..Default::default()
+                            },
+                            t + 1.0,
+                        );
+                    }
                 }
             }
-        }
-
-        match hlcommand {
-            Some(HighLevelCommand::NextPattern) => {
-                if let WorkingMode::Normal = working_mode {
-                    scene_id = (scene_id + 1) % scenes.len();
-                } else {
-                    working_mode = WorkingMode::Normal;
-                }
-            }
-
-            Some(HighLevelCommand::IncreaseBrightness)
-            | Some(HighLevelCommand::DecreaseBrightness) => {
-                if let Some(HighLevelCommand::DecreaseBrightness) = hlcommand {
-                    out_power = out_power.decrease();
-                } else {
-                    out_power = out_power.increase();
-                }
-
-                let patt = match out_power {
-                    OutputPower::High => patterns.power_100,
-                    OutputPower::Medium => patterns.power_75,
-                    OutputPower::Low => patterns.power_50,
-                    OutputPower::NighMode => patterns.power_25,
-                };
-
-                // do not ruin the midi framebuffer
-                if !matches!(working_mode, WorkingMode::RawFramebuffer(_)) {
-                    working_mode = WorkingMode::SpecialTimeout(
-                        RenderCommand {
-                            effect: Pattern::Simple(patt),
-                            color: ColorPalette::Solid((255, 255, 255).into()),
-                            ..Default::default()
-                        },
-                        t + 1.0,
-                    );
-                }
-            }
-
-            None => {}
         }
 
         match &working_mode {
@@ -485,7 +506,7 @@ unsafe fn SWI_IRQ_1() {
 }
 
 #[embassy_executor::task]
-async fn ir_receiver(ir_sensor: Input<'static>, control: AppSender) {
+async fn ir_receiver(ir_sensor: Input<'static>, publisher: MegaPublisher) {
     let mut int_receiver: Receiver<Nec, embassy_rp::gpio::Input> = Receiver::builder()
         .rc5()
         .frequency(1_000_000)
@@ -497,15 +518,19 @@ async fn ir_receiver(ir_sensor: Input<'static>, control: AppSender) {
         int_receiver.pin_mut().wait_for_any_edge().await;
 
         if let Ok(Some(cmd)) = int_receiver.event_instant(Instant::now().as_ticks() as u32) {
-            control
-                .send(TaskCommand::IrCommand(cmd.addr, cmd.cmd, cmd.repeat))
+            publisher
+                .publish(TaskCommand::IrCommand(cmd.addr, cmd.cmd, cmd.repeat))
                 .await;
         }
     }
 }
 
 #[embassy_executor::task]
-async fn ir_blaster_tsk(mut ir_blaster: pwm::Pwm<'static>, receiver: IrChanReceiver) {
+async fn ir_blaster_tsk(
+    mut ir_blaster: pwm::Pwm<'static>,
+    mut subscriber: MegaSubscriber,
+    publisher: MegaPublisher,
+) {
     use infrared::sender::Status;
 
     fn enable_pwm(pwm: &mut pwm::Pwm, pwm_cfg: &mut pwm::Config, enable: bool) {
@@ -519,47 +544,49 @@ async fn ir_blaster_tsk(mut ir_blaster: pwm::Pwm<'static>, receiver: IrChanRecei
     }
 
     loop {
-        let (addr, cmd, repeat) = receiver.receive().await;
-        const FREQUENCY: u32 = 20000;
+        if let TaskCommand::SendIr(addr, cmd, repeat) = subscriber.next_message_pure().await {
+            const FREQUENCY: u32 = 20000;
 
-        let mut buffer: infrared::sender::PulsedataSender<128> =
-            infrared::sender::PulsedataSender::new();
+            let mut buffer: infrared::sender::PulsedataSender<128> =
+                infrared::sender::PulsedataSender::new();
 
-        let cmd = infrared::protocol::nec::NecCommand { addr, cmd, repeat };
-        buffer.load_command::<Nec, FREQUENCY>(&cmd);
-        let mut counter = 0;
+            let cmd = infrared::protocol::nec::NecCommand { addr, cmd, repeat };
+            buffer.load_command::<Nec, FREQUENCY>(&cmd);
+            let mut counter = 0;
 
-        let mut pwm_cfg: pwm::Config = Default::default();
-        pwm_cfg.enable = false;
-        // system clock is 125MHz
-        // we need to do 38khz, so 125_000_000 / 38_000 = 3289
-        pwm_cfg.top = (125_000_000 / 38_000) as u16;
-        pwm_cfg.compare_b = pwm_cfg.top / 2;
+            let mut pwm_cfg: pwm::Config = Default::default();
+            pwm_cfg.enable = false;
+            // system clock is 125MHz
+            // we need to do 38khz, so 125_000_000 / 38_000 = 3289
+            pwm_cfg.top = (125_000_000 / 38_000) as u16;
+            pwm_cfg.compare_b = pwm_cfg.top / 2;
 
-        let mut ticker = Ticker::every(Duration::from_hz(FREQUENCY as u64));
-        loop {
-            let status: infrared::sender::Status = buffer.tick(counter);
-            counter = counter.wrapping_add(1);
+            let mut ticker = Ticker::every(Duration::from_hz(FREQUENCY as u64));
+            loop {
+                let status: infrared::sender::Status = buffer.tick(counter);
+                counter = counter.wrapping_add(1);
 
-            match status {
-                Status::Transmit(v) => {
-                    enable_pwm(&mut ir_blaster, &mut pwm_cfg, v);
-                }
-                Status::Idle => {
-                    enable_pwm(&mut ir_blaster, &mut pwm_cfg, false);
-                    break;
-                }
-                Status::Error => {
-                    log::error!("Error in IR blaster");
-                    enable_pwm(&mut ir_blaster, &mut pwm_cfg, false);
-                    break;
-                }
-            };
+                match status {
+                    Status::Transmit(v) => {
+                        enable_pwm(&mut ir_blaster, &mut pwm_cfg, v);
+                    }
+                    Status::Idle => {
+                        enable_pwm(&mut ir_blaster, &mut pwm_cfg, false);
+                        break;
+                    }
+                    Status::Error => {
+                        log::error!("Error in IR blaster");
+                        enable_pwm(&mut ir_blaster, &mut pwm_cfg, false);
+                        break;
+                    }
+                };
 
-            ticker.next().await;
+                ticker.next().await;
+            }
+            log::info!("tx done");
+            enable_pwm(&mut ir_blaster, &mut pwm_cfg, false);
+            publisher.publish(TaskCommand::IrTxDone).await;
         }
-        log::info!("tx done");
-        enable_pwm(&mut ir_blaster, &mut pwm_cfg, false);
     }
 }
 
@@ -567,7 +594,7 @@ async fn ir_blaster_tsk(mut ir_blaster: pwm::Pwm<'static>, receiver: IrChanRecei
 async fn temperature(
     mut adc: adc::Adc<'static, adc::Async>,
     mut ts: adc::Channel<'static>,
-    control: AppSender,
+    publisher: MegaPublisher,
 ) {
     let mut ticker = Ticker::every(Duration::from_secs(1));
 
@@ -582,8 +609,8 @@ async fn temperature(
             // lerp from 55 to 65 degrees maps to gain from 1.0 to 0.1
             let gain: f64 = 1.0 - (temp_degrees_c - 55.0) / 10.0;
             let gain = gain.clamp(0.0, 1.0);
-            control
-                .send(TaskCommand::ThermalThrottleMultiplier(gain as f32))
+            publisher
+                .publish(TaskCommand::ThermalThrottleMultiplier(gain as f32))
                 .await;
         }
 
@@ -592,7 +619,7 @@ async fn temperature(
 }
 
 #[embassy_executor::task]
-async fn button_driver(mut button: Input<'static>, control: AppSender) {
+async fn button_driver(mut button: Input<'static>, publisher: MegaPublisher) {
     let mut press_start;
 
     loop {
@@ -604,7 +631,7 @@ async fn button_driver(mut button: Input<'static>, control: AppSender) {
             Ok(_) => {}
             // timeout
             Err(_) => {
-                control.send(TaskCommand::LongButtonPress).await;
+                publisher.publish(TaskCommand::LongButtonPress).await;
                 button.wait_for_high().await;
             }
         }
@@ -614,7 +641,7 @@ async fn button_driver(mut button: Input<'static>, control: AppSender) {
         if press_duration >= Duration::from_millis(50)
             && press_duration < Duration::from_millis(1000)
         {
-            control.send(TaskCommand::ShortButtonPress).await;
+            publisher.publish(TaskCommand::ShortButtonPress).await;
         }
     }
 }
