@@ -508,6 +508,16 @@ async fn ir_receiver(ir_sensor: Input<'static>, control: AppSender) {
 async fn ir_blaster_tsk(mut ir_blaster: pwm::Pwm<'static>, receiver: IrChanReceiver) {
     use infrared::sender::Status;
 
+    fn enable_pwm(pwm: &mut pwm::Pwm, pwm_cfg: &mut pwm::Config, enable: bool) {
+        pwm_cfg.enable = enable;
+        pwm.set_config(pwm_cfg);
+
+        // why the hell does the pwm pin stay high when we disable the pwm?
+        unsafe {
+            *((0x40014000 + 11 * 8 + 0x04) as *mut u32) = if enable { 4 } else { 0x1f };
+        }
+    }
+
     loop {
         let (addr, cmd, repeat) = receiver.receive().await;
         const FREQUENCY: u32 = 20000;
@@ -533,24 +543,23 @@ async fn ir_blaster_tsk(mut ir_blaster: pwm::Pwm<'static>, receiver: IrChanRecei
 
             match status {
                 Status::Transmit(v) => {
-                    pwm_cfg.enable = v;
-                    ir_blaster.set_config(&pwm_cfg);
+                    enable_pwm(&mut ir_blaster, &mut pwm_cfg, v);
                 }
                 Status::Idle => {
-                    pwm_cfg.enable = false;
-                    ir_blaster.set_config(&pwm_cfg);
+                    enable_pwm(&mut ir_blaster, &mut pwm_cfg, false);
                     break;
                 }
                 Status::Error => {
                     log::error!("Error in IR blaster");
-                    pwm_cfg.enable = false;
-                    ir_blaster.set_config(&pwm_cfg);
+                    enable_pwm(&mut ir_blaster, &mut pwm_cfg, false);
                     break;
                 }
             };
 
             ticker.next().await;
         }
+        log::info!("tx done");
+        enable_pwm(&mut ir_blaster, &mut pwm_cfg, false);
     }
 }
 
