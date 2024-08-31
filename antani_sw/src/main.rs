@@ -30,10 +30,15 @@ use heapless::Vec;
 use infrared::{protocol::Nec, Receiver};
 use panic_probe as _;
 
+mod capnp;
 mod rgbeffects;
 mod scenes;
 mod usb;
 mod ws2812;
+
+pub mod usb_messages_capnp {
+    include!(concat!(env!("OUT_DIR"), "/usb_messages_capnp.rs"));
+}
 
 bind_interrupts!(struct Irqs {
     PIO0_IRQ_0 => InterruptHandler<PIO0>;
@@ -54,7 +59,7 @@ const LED_MATRIX_WIDTH: usize = 3;
 const LED_MATRIX_HEIGHT: usize = 3;
 const LED_MATRIX_SIZE: usize = LED_MATRIX_WIDTH * LED_MATRIX_HEIGHT;
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, Debug)]
 struct RawFramebuffer<T>
 where
     T: Default + Copy,
@@ -186,18 +191,20 @@ impl LedMatrix {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 enum TaskCommand {
     ThermalThrottleMultiplier(f32), // 1.0 = no throttle, 0.0 = full throttle
     IrCommand(u8, u8, bool),        // add, cmd, repeat
     ShortButtonPress,
     LongButtonPress,
     MidiSetPixel(u8, u8, u8, u8), // x y channel (0=r 1=g 2=b) value
+    SetWorkingMode(WorkingMode),
     SendIr(u8, u8, bool),
     IrTxDone,
     NextPattern,
     IncreaseBrightness,
     DecreaseBrightness,
+    None,
 }
 
 static MEGA_CHANNEL: PubSubChannel<CriticalSectionRawMutex, TaskCommand, 8, 4, 8> =
@@ -470,6 +477,12 @@ async fn main(spawner: Spawner) {
                         );
                     }
                 }
+
+                TaskCommand::SetWorkingMode(wm) => {
+                    working_mode = wm;
+                }
+
+                TaskCommand::None => {}
             }
         }
 

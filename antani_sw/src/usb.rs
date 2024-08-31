@@ -4,6 +4,7 @@ use embassy_rp::bind_interrupts;
 use embassy_rp::peripherals::USB;
 use embassy_rp::usb::{Driver, Instance, InterruptHandler};
 use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
+use heapless::Vec;
 use log::info;
 use static_cell::StaticCell;
 
@@ -84,7 +85,7 @@ pub async fn usb_main(usb: USB, publisher: MegaPublisher) {
         loop {
             cdc_class.wait_connection().await;
             log::info!("Connected");
-            let _ = usb_control(&mut cdc_class).await;
+            let _ = usb_control(&mut cdc_class, &publisher).await;
             log::info!("Disconnected");
         }
     };
@@ -149,14 +150,56 @@ async fn midi_echo<'d, T: Instance + 'd>(
     }
 }
 
+struct AlignedVec {
+    x: Vec<u8, 256>,
+    _alignment: [u64; 0],
+}
+
+impl AlignedVec {
+    fn new() -> Self {
+        Self {
+            x: Vec::<u8, 256>::new(),
+            _alignment: [0; 0],
+        }
+    }
+}
+
 async fn usb_control<'d, T: Instance + 'd>(
     class: &mut CdcAcmClass<'d, Driver<'d, T>>,
+    publisher: &MegaPublisher,
 ) -> Result<(), Disconnected> {
     let mut buf = [0; 64];
+    let mut mega_deserialization_buf = AlignedVec::new();
     loop {
         let n = class.read_packet(&mut buf).await?;
         let data = &buf[..n];
         info!("usb cdc data: {:?}", data);
-        class.write_packet("unimplemented!".as_bytes()).await?;
+
+        // append to the mega deserialization buffer
+        // we don't really care if it fails, we'll just clear it later
+        mega_deserialization_buf.x.extend_from_slice(data).ok();
+
+        let e = crate::capnp::deserialize_message(&mut mega_deserialization_buf.x.as_slice());
+
+        match e {
+            Ok(command) => {
+                info!("Deserialized message");
+
+                mega_deserialization_buf.x.clear();
+
+                publisher.publish(command).await;
+            }
+            Err(e) => match e.kind {
+                capnp::ErrorKind::MessageEndsPrematurely(_, _) => {
+                    continue;
+                }
+
+                e => {
+                    info!("Error deserializing message: {:?}", e);
+
+                    mega_deserialization_buf.x.clear();
+                }
+            },
+        }
     }
 }

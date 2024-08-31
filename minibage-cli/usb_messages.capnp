@@ -1,0 +1,1 @@
+../antani_sw/usb_messages.capnp

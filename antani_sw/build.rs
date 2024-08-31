@@ -33,4 +33,9 @@ fn main() {
     println!("cargo:rustc-link-arg-bins=-Tlink.x");
     println!("cargo:rustc-link-arg-bins=-Tlink-rp.x");
     println!("cargo:rustc-link-arg-bins=-Tdefmt.x");
+
+    ::capnpc::CompilerCommand::new()
+        .file("usb_messages.capnp")
+        .run()
+        .expect("compiling schema");
 }
