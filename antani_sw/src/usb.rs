@@ -1,4 +1,4 @@
-use defmt::panic;
+use defmt::{panic, warn};
 use embassy_futures::join::join;
 use embassy_rp::bind_interrupts;
 use embassy_rp::peripherals::USB;
@@ -115,9 +115,15 @@ async fn midi_echo<'d, T: Instance + 'd>(
         // read at chunk of 4 bytes
         for i in (0..n).step_by(4) {
             //let data = &buf[i..i+4];
-            let [_, _, button, value] = buf[i..i + 4]
-                .try_into()
-                .expect("slice with incorrect length");
+            let buf: &[u8; 4] = match buf[i..i + 4].try_into() {
+                Ok(buf) => buf,
+                Err(_) => {
+                    warn!("got bad midi data");
+                    continue;
+                }
+            };
+
+            let [_, _, button, value] = buf;
 
             info!("midi pixel: {}, value: {}", button, value);
 

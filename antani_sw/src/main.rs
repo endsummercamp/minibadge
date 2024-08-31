@@ -612,7 +612,13 @@ async fn temperature(
     let mut ticker = Ticker::every(Duration::from_secs(1));
 
     loop {
-        let temp = adc.read(&mut ts).await.unwrap();
+        let temp = match adc.read(&mut ts).await {
+            Ok(v) => v,
+            Err(e) => {
+                log::error!("Error reading temperature: {:?}", e);
+                continue;
+            }
+        };
 
         // TODO: yeah let's waste precious CPU cycles to calculate the temperature before checking if we need to throttle
         let adc_voltage = (3.3 / 4096.0) * temp as f64;
