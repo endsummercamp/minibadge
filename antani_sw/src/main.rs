@@ -14,7 +14,7 @@ use embassy_rp::interrupt::{InterruptExt, Priority};
 
 use embassy_sync::pubsub::PubSubChannel;
 use embassy_sync::pubsub::Publisher;
-use log::info;
+use log::{info, warn};
 
 use embassy_rp::peripherals::PIO0;
 use embassy_rp::pio::{InterruptHandler, Pio};
@@ -191,7 +191,7 @@ impl LedMatrix {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum TaskCommand {
     ThermalThrottleMultiplier(f32), // 1.0 = no throttle, 0.0 = full throttle
     IrCommand(u8, u8, bool),        // add, cmd, repeat
@@ -204,6 +204,7 @@ enum TaskCommand {
     NextPattern,
     IncreaseBrightness,
     DecreaseBrightness,
+    ResetTime,
     None,
 }
 
@@ -214,7 +215,7 @@ type MegaSubscriber =
     embassy_sync::pubsub::Subscriber<'static, CriticalSectionRawMutex, TaskCommand, 8, 4, 8>;
 
 // if we need to override the normal rendering with a special effect, we use this enum
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum WorkingMode {
     Normal,                             // normal rendering, user selecting the patterns etc
     Special(RenderCommand), // override normal rendering until the user presses the button
@@ -351,18 +352,17 @@ async fn main(spawner: Spawner) {
         }
 
         if let Some(message) = mega_subscriber.try_next_message_pure() {
+            info!("Handling message: {:?}", message);
             match message {
                 TaskCommand::ThermalThrottleMultiplier(gain) => {
                     renderman.mtrx.set_raw_gain(gain);
                     if gain < 1.0 {
-                        info!("Thermal throttle multiplier: {}", gain);
+                        warn!("Thermal throttling! {}", gain);
                     }
                 }
                 TaskCommand::IrCommand(addr, cmd, repeat) => {
-                    info!("IR command: {} {} {}", addr, cmd, repeat);
-
                     if is_transmitting {
-                        info!("Ignoring IR command, we are transmitting");
+                        warn!("Ignoring IR command, we are transmitting");
                         continue;
                     }
 
@@ -385,7 +385,7 @@ async fn main(spawner: Spawner) {
                         (0, 67, false) => {
                             // on
                             // this is used to sync clocks between multiple devices
-                            timer_offset = Instant::now().as_micros() as f64 / 1_000_000.0;
+                            mega_publisher.publish(TaskCommand::ResetTime).await;
                         }
 
                         (0, 68, false) => {
@@ -398,23 +398,23 @@ async fn main(spawner: Spawner) {
                         // say hi to the other badge
                         (0, 66, false) => {
                             // we do this so the animation starts in the correct time
-                            timer_offset = Instant::now().as_micros() as f64 / 1_000_000.0;
+                            mega_publisher.publish(TaskCommand::ResetTime).await;
 
-                            working_mode = WorkingMode::SpecialTimeout(boot_animation.clone(), 0.5);
-                            // we short circuit the main loop so the timer_offset is put in the correct place
-                            // this is a bit of an hack, probably needs some rework on the time keeping
-                            continue;
+                            mega_publisher
+                                .publish(TaskCommand::SetWorkingMode(WorkingMode::SpecialTimeout(
+                                    boot_animation.clone(),
+                                    0.5,
+                                )))
+                                .await;
                         }
 
                         _ => {}
                     }
                 }
                 TaskCommand::ShortButtonPress => {
-                    info!("Short button press");
                     mega_publisher.publish(TaskCommand::NextPattern).await;
                 }
                 TaskCommand::LongButtonPress => {
-                    info!("Long button press");
                     mega_publisher
                         .publish(TaskCommand::DecreaseBrightness)
                         .await;
@@ -480,6 +480,10 @@ async fn main(spawner: Spawner) {
 
                 TaskCommand::SetWorkingMode(wm) => {
                     working_mode = wm;
+                }
+
+                TaskCommand::ResetTime => {
+                    timer_offset = Instant::now().as_micros() as f64 / 1_000_000.0;
                 }
 
                 TaskCommand::None => {}
@@ -624,7 +628,7 @@ async fn temperature(
         let adc_voltage = (3.3 / 4096.0) * temp as f64;
         let temp_degrees_c = 27.0 - (adc_voltage - 0.706) / 0.001721;
 
-        if temp_degrees_c > 40.0 {
+        if temp_degrees_c > 50.0 {
             // lerp from 55 to 65 degrees maps to gain from 1.0 to 0.1
             let gain: f64 = 1.0 - (temp_degrees_c - 55.0) / 10.0;
             let gain = gain.clamp(0.0, 1.0);

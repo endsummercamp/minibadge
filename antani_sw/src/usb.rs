@@ -5,7 +5,7 @@ use embassy_rp::peripherals::USB;
 use embassy_rp::usb::{Driver, Instance, InterruptHandler};
 use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
 use heapless::Vec;
-use log::info;
+use log::{error, info};
 use static_cell::StaticCell;
 
 use crate::MegaPublisher;
@@ -66,7 +66,16 @@ pub async fn usb_main(usb: USB, publisher: MegaPublisher) {
     let mut cdc_class = CdcAcmClass::new(&mut builder, state, 64);
     let logger_class = CdcAcmClass::new(&mut builder, logger_state, 64);
 
-    let log_fut = embassy_usb_logger::with_class!(1024, log::LevelFilter::Info, logger_class);
+    let log_fut = embassy_usb_logger::with_custom_style!(
+        1024,
+        log::LevelFilter::Info,
+        logger_class,
+        |record, writer| {
+            use core::fmt::Write;
+            let level = record.level().as_str();
+            write!(writer, "[{level}] {}\r\n", record.args()).unwrap();
+        }
+    );
 
     let mut usb = builder.build();
 
@@ -201,7 +210,7 @@ async fn usb_control<'d, T: Instance + 'd>(
                 }
 
                 e => {
-                    info!("Error deserializing message: {:?}", e);
+                    error!("Error deserializing message: {:?}", e);
 
                     mega_deserialization_buf.x.clear();
                 }

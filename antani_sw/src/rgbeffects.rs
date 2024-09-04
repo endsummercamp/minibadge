@@ -8,7 +8,7 @@ use crate::{LedMatrix, RawFramebuffer};
 
 pub type LedPattern = u16;
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct RenderCommand {
     pub effect: Pattern,
     pub color: ColorPalette,
@@ -99,7 +99,7 @@ fn hsl2rgb(h: f64, s: f64, l: f64) -> RGB8 {
     (r, g, b).into()
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum FragmentShader {
     Breathing(f32),       // speed
     Blinking(f32),        // speed
@@ -182,7 +182,7 @@ impl FragmentShader {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ColorPalette {
     Rainbow(f32), // speed
     Solid(RGB8),
@@ -208,7 +208,7 @@ impl ColorPalette {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Pattern {
     Simple(LedPattern),
     Animation(&'static [LedPattern], f32), // pattern, speed
