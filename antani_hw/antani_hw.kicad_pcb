@@ -2719,13 +2719,12 @@
 			(pintype "passive")
 			(uuid "73dc2edf-19ed-442c-9ecf-c9ee9600c124")
 		)
-		(model "${KICAD8_3DMODEL_DIR}/Connector_PinSocket_1.27mm.3dshapes/PinSocket_2x02_P1.27mm_Vertical_SMD.wrl"
-			(hide yes)
+		(model "${KICAD8_3DMODEL_DIR}/OptoDevice.3dshapes/Finder_34.81.wrl"
 			(offset
-				(xyz 0 0 0)
+				(xyz -1.97 1.5 0)
 			)
 			(scale
-				(xyz 1 1 1)
+				(xyz 0.15 1.2 0.1001)
 			)
 			(rotate
 				(xyz 0 0 0)
@@ -7664,7 +7663,7 @@
 			(pintype "power_in")
 			(uuid "ade4f8ec-4a79-4513-8574-736b8599dd48")
 		)
-		(model "${KICAD8_3DMODEL_DIR}/Package_SO.3dshapes/SOIC-8_5.23x5.23mm_P1.27mm.wrl"
+		(model "${KICAD8_3DMODEL_DIR}/Package_SO.3dshapes/SOIC-8_5.275x5.275mm_P1.27mm.step"
 			(offset
 				(xyz 0 0 0)
 			)
@@ -8209,7 +8208,7 @@
 				(xyz 0 0 0)
 			)
 		)
-		(model "${KIPRJMOD}/lib/3d/TSA016A2518C.step"
+		(model "${KIPRJMOD}/lib/TSA016A2518C.step"
 			(offset
 				(xyz 0 0 0)
 			)
