@@ -8,6 +8,7 @@ use defmt::unwrap;
 use embassy_executor::{InterruptExecutor, Spawner};
 use embassy_rp::adc;
 use embassy_rp::gpio::Input;
+use embassy_rp::gpio::Pin;
 use embassy_rp::gpio::Pull;
 use embassy_rp::interrupt;
 use embassy_rp::interrupt::{InterruptExt, Priority};
@@ -27,7 +28,7 @@ use embassy_time::{Duration, Ticker, Timer};
 
 use embassy_rp::bind_interrupts;
 use heapless::Vec;
-use infrared::{protocol::Nec, Receiver};
+use infrared::{protocol::Nec, protocol::SamsungNec, Receiver};
 use panic_probe as _;
 
 mod capnp;
@@ -291,7 +292,6 @@ async fn main(spawner: Spawner) {
     let mut scene_id = 0;
     let mut out_power = OutputPower::High;
 
-    let ir_sensor = Input::new(p.PIN_10, Pull::None);
     let mut user_button = Input::new(p.PIN_9, Pull::Up);
 
     // if we start with the button pressed, function as a torch light
@@ -317,7 +317,10 @@ async fn main(spawner: Spawner) {
 
     interrupt::SWI_IRQ_1.set_priority(Priority::P3);
     let highpriority_spawner = EXECUTOR_HIGH.start(interrupt::SWI_IRQ_1);
-    unwrap!(highpriority_spawner.spawn(ir_receiver(ir_sensor, MEGA_CHANNEL.publisher().unwrap())));
+    unwrap!(highpriority_spawner.spawn(ir_receiver(
+        p.PIN_10.pin(),
+        MEGA_CHANNEL.publisher().unwrap()
+    )));
 
     let mut pwm_cfg: pwm::Config = Default::default();
     pwm_cfg.enable = false;
@@ -523,18 +526,41 @@ unsafe fn SWI_IRQ_1() {
 }
 
 #[embassy_executor::task]
-async fn ir_receiver(ir_sensor: Input<'static>, publisher: MegaPublisher) {
-    let mut int_receiver: Receiver<Nec, embassy_rp::gpio::Input> = Receiver::builder()
+async fn ir_receiver(ir_sensor: u8, publisher: MegaPublisher) {
+    // this is a mega hack to support the reception of two different IR protocols
+    // we unsafely use the same pin for both receivers
+
+    let mut nec_receiver: Receiver<Nec, embassy_rp::gpio::Input> = Receiver::builder()
         .rc5()
         .frequency(1_000_000)
-        .pin(ir_sensor)
+        .pin(Input::new(
+            unsafe { embassy_rp::gpio::AnyPin::steal(ir_sensor) },
+            Pull::None,
+        ))
+        .protocol()
+        .build();
+
+    let mut samsung_receiver: Receiver<SamsungNec, embassy_rp::gpio::Input> = Receiver::builder()
+        .rc5()
+        .frequency(1_000_000)
+        .pin(Input::new(
+            unsafe { embassy_rp::gpio::AnyPin::steal(ir_sensor) },
+            Pull::None,
+        ))
         .protocol()
         .build();
 
     loop {
-        int_receiver.pin_mut().wait_for_any_edge().await;
+        samsung_receiver.pin_mut().wait_for_any_edge().await;
+        let now = Instant::now().as_ticks() as u32;
 
-        if let Ok(Some(cmd)) = int_receiver.event_instant(Instant::now().as_ticks() as u32) {
+        if let Ok(Some(cmd)) = samsung_receiver.event_instant(now) {
+            publisher
+                .publish(TaskCommand::IrCommand(cmd.addr, cmd.cmd, cmd.repeat))
+                .await;
+        }
+
+        if let Ok(Some(cmd)) = nec_receiver.event_instant(now) {
             publisher
                 .publish(TaskCommand::IrCommand(cmd.addr, cmd.cmd, cmd.repeat))
                 .await;
