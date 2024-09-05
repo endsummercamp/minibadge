@@ -8,6 +8,7 @@ use defmt::unwrap;
 use embassy_executor::{InterruptExecutor, Spawner};
 use embassy_rp::adc;
 use embassy_rp::gpio::Input;
+use embassy_rp::gpio::Output;
 use embassy_rp::gpio::Pin;
 use embassy_rp::gpio::Pull;
 use embassy_rp::interrupt;
@@ -292,7 +293,7 @@ async fn main(spawner: Spawner) {
     let mut scene_id = 0;
     let mut out_power = OutputPower::High;
 
-    let mut user_button = Input::new(p.PIN_9, Pull::Up);
+    let mut user_button = Input::new(p.PIN_8, Pull::Up);
 
     // if we start with the button pressed, function as a torch light
     if user_button.is_low() {
@@ -313,7 +314,11 @@ async fn main(spawner: Spawner) {
         MEGA_CHANNEL.publisher().unwrap()
     )));
 
+    // white led
+    let _white_led = Output::new(p.PIN_20, embassy_rp::gpio::Level::Low);
+
     // infrared stuff
+    let _ir_sens_0 = Input::new(p.PIN_9, Pull::None);
 
     interrupt::SWI_IRQ_1.set_priority(Priority::P3);
     let highpriority_spawner = EXECUTOR_HIGH.start(interrupt::SWI_IRQ_1);
