@@ -2381,7 +2381,7 @@
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
-		(dnp yes)
+		(dnp no)
 		(uuid "0c446a7c-647b-4823-bc2e-c8ac0786bbd9")
 		(property "Reference" "D1"
 			(at 33.02 168.91 0)
@@ -2420,6 +2420,15 @@
 			)
 		)
 		(property "Description" "RGB LED with integrated controller"
+			(at 36.83 177.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C2843785"
 			(at 36.83 177.8 0)
 			(effects
 				(font
@@ -2686,7 +2695,7 @@
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
-		(dnp yes)
+		(dnp no)
 		(uuid "15ff5824-7874-4cf7-b37a-f91f161e6b23")
 		(property "Reference" "D2"
 			(at 48.26 168.91 0)
@@ -2725,6 +2734,15 @@
 			)
 		)
 		(property "Description" "RGB LED with integrated controller"
+			(at 52.07 177.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C2843785"
 			(at 52.07 177.8 0)
 			(effects
 				(font
@@ -3109,7 +3127,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "TestPoint"
+		(property "Value" "GPIO23"
 			(at 207.01 100.33 90)
 			(effects
 				(font
@@ -3398,7 +3416,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "TestPoint"
+		(property "Value" "GPIO22"
 			(at 207.01 97.79 90)
 			(effects
 				(font
@@ -4051,7 +4069,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "TestPoint"
+		(property "Value" "GPIO29"
 			(at 207.01 115.57 90)
 			(effects
 				(font
@@ -4304,7 +4322,7 @@
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
-		(dnp yes)
+		(dnp no)
 		(uuid "55c78935-e3f3-46a3-836d-b55c8d26c7e9")
 		(property "Reference" "D7"
 			(at 124.46 168.91 0)
@@ -4343,6 +4361,15 @@
 			)
 		)
 		(property "Description" "RGB LED with integrated controller"
+			(at 128.27 177.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C2843785"
 			(at 128.27 177.8 0)
 			(effects
 				(font
@@ -4469,7 +4496,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "TestPoint"
+		(property "Value" "GPIO25"
 			(at 207.01 105.41 90)
 			(effects
 				(font
@@ -4746,7 +4773,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "TestPoint"
+		(property "Value" "GPIO27"
 			(at 207.01 110.49 90)
 			(effects
 				(font
@@ -5152,7 +5179,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "TestPoint"
+		(property "Value" "GPIO26"
 			(at 207.01 107.95 90)
 			(effects
 				(font
@@ -5360,7 +5387,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "TestPoint"
+		(property "Value" "GPIO24"
 			(at 207.01 102.87 90)
 			(effects
 				(font
@@ -5821,7 +5848,7 @@
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
-		(dnp yes)
+		(dnp no)
 		(uuid "87c26847-79d2-42ad-8d2f-3436ec74f4c1")
 		(property "Reference" "D6"
 			(at 109.22 168.91 0)
@@ -5860,6 +5887,15 @@
 			)
 		)
 		(property "Description" "RGB LED with integrated controller"
+			(at 113.03 177.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C2843785"
 			(at 113.03 177.8 0)
 			(effects
 				(font
@@ -6118,7 +6154,7 @@
 				(justify left)
 			)
 		)
-		(property "Value" "TestPoint"
+		(property "Value" "GPIO28"
 			(at 207.01 113.03 90)
 			(effects
 				(font
@@ -6173,7 +6209,7 @@
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
-		(dnp yes)
+		(dnp no)
 		(uuid "8c410764-c8fe-48f6-b8b6-8a47a4d5eb85")
 		(property "Reference" "D9"
 			(at 154.94 168.91 0)
@@ -6220,6 +6256,15 @@
 				(hide yes)
 			)
 		)
+		(property "LCSC" "C2843785"
+			(at 158.75 177.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
 		(pin "4"
 			(uuid "432488ef-b783-435e-ac26-971d0d6ebe70")
 		)
@@ -6248,7 +6293,7 @@
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
-		(dnp yes)
+		(dnp no)
 		(uuid "8d02d491-2288-46b6-a9f6-a3f9354cb621")
 		(property "Reference" "D3"
 			(at 63.5 168.91 0)
@@ -6287,6 +6332,15 @@
 			)
 		)
 		(property "Description" "RGB LED with integrated controller"
+			(at 67.31 177.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C2843785"
 			(at 67.31 177.8 0)
 			(effects
 				(font
@@ -6465,7 +6519,7 @@
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
-		(dnp yes)
+		(dnp no)
 		(uuid "94dd329f-030c-44f8-aec2-71a71f1172da")
 		(property "Reference" "D8"
 			(at 139.7 168.91 0)
@@ -6504,6 +6558,15 @@
 			)
 		)
 		(property "Description" "RGB LED with integrated controller"
+			(at 143.51 177.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C2843785"
 			(at 143.51 177.8 0)
 			(effects
 				(font
@@ -7555,7 +7618,7 @@
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
-		(dnp yes)
+		(dnp no)
 		(uuid "d8f5e8e7-183a-4fac-955d-743889d58ae3")
 		(property "Reference" "D5"
 			(at 93.98 168.91 0)
@@ -7594,6 +7657,15 @@
 			)
 		)
 		(property "Description" "RGB LED with integrated controller"
+			(at 97.79 177.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C2843785"
 			(at 97.79 177.8 0)
 			(effects
 				(font
@@ -8002,7 +8074,7 @@
 		(exclude_from_sim no)
 		(in_bom yes)
 		(on_board yes)
-		(dnp yes)
+		(dnp no)
 		(uuid "edc14d91-49a6-4a66-b910-b123573f15f2")
 		(property "Reference" "D4"
 			(at 78.74 168.91 0)
@@ -8041,6 +8113,15 @@
 			)
 		)
 		(property "Description" "RGB LED with integrated controller"
+			(at 82.55 177.8 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "LCSC" "C2843785"
 			(at 82.55 177.8 0)
 			(effects
 				(font
