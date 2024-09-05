@@ -2,7 +2,7 @@
 edition = "2021"
 name = "antani_sw"
 version = "0.1.0"
-license = "MIT OR Apache-2.0"
+license = "GPL-3.0-or-later"
 
 [build-dependencies]
 capnpc = "0.19.0"

@@ -18,19 +18,32 @@ pub mod usb_messages_capnp {
 
 #[derive(Parser, Debug)]
 struct Args {
+    /// Serial port for communicating with the badge
+    /// 
+    /// This is the management interface with capnp, not the debug interface
+    /// 
+    /// Defaults to /dev/ttyACM0
     #[arg(short, long)]
     serial_port: Option<String>,
 
     /// Set the badge to a solid color, the color should be written in hex format
+    /// like "#ff0000" for red, etc.
     #[arg(short = 'c', long)]
     solid_color: Option<String>,
 
     /// Frame buffer to send to the badge.
+    /// 
     /// The frame buffer is a string with 9 "css" colors separated by spaces
     /// like "#ff0000 #00ff00 [...]"
     #[arg(short, long)]
     frame_buffer: Option<String>,
 
+    /// Demo application to use the badge with the midi interface
+    /// This does not do anything useful, it's just a demo to show 
+    /// how to use the midi interface
+    /// 
+    /// The argument is the path to a midi device
+    /// For example: /dev/midi3c
     #[arg(short, long)]
     midi_demo: Option<String>,
 }
