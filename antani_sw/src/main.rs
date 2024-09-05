@@ -196,12 +196,12 @@ impl LedMatrix {
 #[derive(Clone, Debug)]
 enum TaskCommand {
     ThermalThrottleMultiplier(f32), // 1.0 = no throttle, 0.0 = full throttle
-    IrCommand(u8, u8, bool),        // add, cmd, repeat
+    ReceivedIrNec(u8, u8, bool),    // add, cmd, repeat
     ShortButtonPress,
     LongButtonPress,
     MidiSetPixel(u8, u8, u8, u8), // x y channel (0=r 1=g 2=b) value
     SetWorkingMode(WorkingMode),
-    SendIr(u8, u8, bool),
+    SendIrNec(u8, u8, bool),
     IrTxDone,
     NextPattern,
     IncreaseBrightness,
@@ -345,7 +345,7 @@ async fn main(spawner: Spawner) {
 
     info!("Starting loop");
     mega_publisher
-        .publish(TaskCommand::SendIr(0, 66, false))
+        .publish(TaskCommand::SendIrNec(0, 66, false))
         .await;
 
     let mut timer_offset = 0.0;
@@ -368,7 +368,7 @@ async fn main(spawner: Spawner) {
                         warn!("Thermal throttling! {}", gain);
                     }
                 }
-                TaskCommand::IrCommand(addr, cmd, repeat) => {
+                TaskCommand::ReceivedIrNec(addr, cmd, repeat) => {
                     if is_transmitting {
                         warn!("Ignoring IR command, we are transmitting");
                         continue;
@@ -443,7 +443,7 @@ async fn main(spawner: Spawner) {
                     working_mode = WorkingMode::RawFramebuffer(midi_framebuffer);
                 }
 
-                TaskCommand::SendIr(_, _, _) => {
+                TaskCommand::SendIrNec(_, _, _) => {
                     is_transmitting = true;
                 }
 
@@ -561,13 +561,13 @@ async fn ir_receiver(ir_sensor: u8, publisher: MegaPublisher) {
 
         if let Ok(Some(cmd)) = samsung_receiver.event_instant(now) {
             publisher
-                .publish(TaskCommand::IrCommand(cmd.addr, cmd.cmd, cmd.repeat))
+                .publish(TaskCommand::ReceivedIrNec(cmd.addr, cmd.cmd, cmd.repeat))
                 .await;
         }
 
         if let Ok(Some(cmd)) = nec_receiver.event_instant(now) {
             publisher
-                .publish(TaskCommand::IrCommand(cmd.addr, cmd.cmd, cmd.repeat))
+                .publish(TaskCommand::ReceivedIrNec(cmd.addr, cmd.cmd, cmd.repeat))
                 .await;
         }
     }
@@ -592,7 +592,7 @@ async fn ir_blaster_tsk(
     }
 
     loop {
-        if let TaskCommand::SendIr(addr, cmd, repeat) = subscriber.next_message_pure().await {
+        if let TaskCommand::SendIrNec(addr, cmd, repeat) = subscriber.next_message_pure().await {
             const FREQUENCY: u32 = 20000;
 
             let mut buffer: infrared::sender::PulsedataSender<128> =

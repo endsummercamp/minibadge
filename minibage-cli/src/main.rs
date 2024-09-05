@@ -1,11 +1,8 @@
-use std::{
-    io::Write,
-    time::Duration,
-};
+use std::{io::Write, time::Duration};
 
 mod midi;
 
-use clap::Parser;
+use clap::{Args, Parser, Subcommand};
 
 use capnp::message::Builder;
 use capnp::serialize;
@@ -16,12 +13,12 @@ pub mod usb_messages_capnp {
     include!(concat!(env!("OUT_DIR"), "/usb_messages_capnp.rs"));
 }
 
-#[derive(Parser, Debug)]
-struct Args {
+#[derive(Parser)]
+struct Cli {
     /// Serial port for communicating with the badge
-    /// 
+    ///
     /// This is the management interface with capnp, not the debug interface
-    /// 
+    ///
     /// Defaults to /dev/ttyACM0
     #[arg(short, long)]
     serial_port: Option<String>,
@@ -32,20 +29,42 @@ struct Args {
     solid_color: Option<String>,
 
     /// Frame buffer to send to the badge.
-    /// 
+    ///
     /// The frame buffer is a string with 9 "css" colors separated by spaces
     /// like "#ff0000 #00ff00 [...]"
     #[arg(short, long)]
     frame_buffer: Option<String>,
 
     /// Demo application to use the badge with the midi interface
-    /// This does not do anything useful, it's just a demo to show 
+    /// This does not do anything useful, it's just a demo to show
     /// how to use the midi interface
-    /// 
+    ///
     /// The argument is the path to a midi device
     /// For example: /dev/midi3c
     #[arg(short, long)]
     midi_demo: Option<String>,
+
+    #[command(subcommand)]
+    subcommand: Option<Subcommands>,
+}
+
+#[derive(Subcommand)]
+enum Subcommands {
+    /// Use the badge to send an infrared NEC command
+    SendNec(SendNec),
+}
+
+#[derive(Args, Debug)]
+struct SendNec {
+    /// NEC address
+    #[arg(short, long)]
+    address: u8,
+    /// NEC command
+    #[arg(short, long)]
+    command: u8,
+    /// Repeat
+    #[arg(short, long)]
+    repeat: bool,
 }
 
 fn hex_color_to_rgb(color: String) -> RGB8 {
@@ -70,7 +89,7 @@ fn midi_demo(file: String) {
 }
 
 fn main() {
-    let args = Args::parse();
+    let args = Cli::parse();
 
     // we don't need serial for the midi demo
     // let it f*ck off before everything else
@@ -88,9 +107,30 @@ fn main() {
         .open()
         .expect("Failed to open port");
 
-    if let Some(fb) = args.frame_buffer {
+    #[allow(clippy::single_match)]
+    match args.subcommand {
+        Some(Subcommands::SendNec(send_nec)) => {
+            let mut message = Builder::new_default();
 
-        let split = fb.split(" ").map(|s| s.to_string()).collect::<Vec<String>>();
+            let badgebound = message.init_root::<usb_messages_capnp::badge_bound::Builder>();
+
+            let mut nec = badgebound.init_send_nec_command();
+            nec.set_address(send_nec.address);
+            nec.set_command(send_nec.command);
+            nec.set_repeat(send_nec.repeat);
+
+            let data = serialize::write_message_to_words(&message);
+
+            port.write_all(&data).expect("Failed to write to port");
+        }
+        None => {}
+    }
+
+    if let Some(fb) = args.frame_buffer {
+        let split = fb
+            .split(" ")
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>();
 
         if split.len() != 9 {
             println!("Frame buffer must be 9 elements long");

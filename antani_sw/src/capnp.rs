@@ -57,6 +57,16 @@ pub fn deserialize_message(data: &mut &[u8]) -> Result<TaskCommand, capnp::Error
                 scene,
             )));
         }
+        usb_messages_capnp::badge_bound::Which::SendNecCommand(command) => {
+            let command = command?;
+
+            let address = command.get_address();
+            let _command = command.get_command();
+            let repeat = command.get_repeat();
+
+            return Ok(TaskCommand::SendIrNec(address, _command, repeat));
+        }
+
         usb_messages_capnp::badge_bound::Which::Null(_) => {}
     }
 

@@ -2,9 +2,10 @@
 
 struct BadgeBound {
   union {
-    setFrameBuffer @0 :SetFrameBuffer;
-    setSolidColor @1 :RGB8;
-    null @2 :Void;
+    null @0 :Void;
+    setFrameBuffer @1 :SetFrameBuffer;
+    setSolidColor @2 :RGB8;
+    sendNecCommand @3 :NecCommand;
   }
 }
 
@@ -18,3 +19,8 @@ struct RGB8 {
   b @2 :UInt8;
 }
 
+struct NecCommand {
+  address @0 :UInt8;
+  command @1 :UInt8;
+  repeat @2 :Bool;
+}

@@ -10,7 +10,11 @@ To run the CLI tool, just run `cargo run -- --help` in this directory.
 
 ```
 > cargo run -q -- --help
-Usage: minibage-cli [OPTIONS]
+Usage: minibage-cli [OPTIONS] [COMMAND]
+
+Commands:
+  send-nec  Use the badge to send an infrared NEC command
+  help      Print this message or the help of the given subcommand(s)
 
 Options:
   -s, --serial-port <SERIAL_PORT>
@@ -31,11 +35,29 @@ Options:
   -m, --midi-demo <MIDI_DEMO>
           Demo application to use the badge with the midi interface This does not do anything useful, it's just a demo to show how to use the midi interface
           
-          The argument is the path to a midi device For example: /dev/midi3
+          The argument is the path to a midi device For example: /dev/midi3c
 
   -h, --help
           Print help (see a summary with '-h')
+
 ```
+
+### Infrared subcommand
+
+```
+> cargo run -q -- help send-nec
+Use the badge to send an infrared NEC command
+
+Usage: minibage-cli send-nec [OPTIONS] --address <ADDRESS> --command <COMMAND>
+
+Options:
+  -a, --address <ADDRESS>  NEC address
+  -c, --command <COMMAND>  NEC command
+  -r, --repeat             Repeat
+  -h, --help               Print help
+```
+
+IR commands can be debugged / received with the badge itself, just open the debug CDC interface with a serial terminal.
 
 ## Examples
 
@@ -49,4 +71,8 @@ cargo run -q -- -s /dev/ttyACM0 -f "#ff0000 #00ff00 #0000ff #ff00ff #00ffff #fff
 
 ```sh
 cargo run -q -- -m /dev/midi3
+```
+
+```sh
+cargo run -q -- -s /dev/ttyACM0  send-nec --address 7 --command 22
 ```

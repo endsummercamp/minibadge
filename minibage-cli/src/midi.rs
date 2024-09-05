@@ -1,5 +1,3 @@
-
-
 use std::{
     fs::OpenOptions,
     io::{self, Read, Write},

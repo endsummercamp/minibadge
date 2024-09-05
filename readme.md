@@ -14,9 +14,10 @@ This is the first official ESC badge with a microcontroller!
 - JTAG and expansion pads
 
 ## Software Features
-- Somewhat fully featured and composable animation engine for light effects and patterns
+- Fully featured and composable animation engine for light effects and patterns
 - A lot of built-in animations, more can be added easily
-- IR remote control support
+- IR remote control support (NEC and Samsung NEC), commands can be added easily
+- IR transmitter (NEC), badge-to-badge communication
 - USB CDC for debug and control
 - USB MIDI for control (you can send standard MIDI messages to control the lights)
 - Automatic overheating protection
