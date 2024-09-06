@@ -207,6 +207,8 @@ enum TaskCommand {
     IncreaseBrightness,
     DecreaseBrightness,
     ResetTime,
+    UsbActivity,
+    Error,
     None,
 }
 
@@ -315,7 +317,12 @@ async fn main(spawner: Spawner) {
     )));
 
     // white led
-    let _white_led = Output::new(p.PIN_20, embassy_rp::gpio::Level::Low);
+    let white_led = Output::new(p.PIN_20, embassy_rp::gpio::Level::Low);
+
+    unwrap!(spawner.spawn(white_led_task(
+        white_led,
+        MEGA_CHANNEL.subscriber().unwrap()
+    )));
 
     // infrared stuff
     let _ir_sens_0 = Input::new(p.PIN_9, Pull::None);
@@ -494,6 +501,8 @@ async fn main(spawner: Spawner) {
                     timer_offset = Instant::now().as_micros() as f64 / 1_000_000.0;
                 }
 
+                TaskCommand::UsbActivity | TaskCommand::Error => {}
+
                 TaskCommand::None => {}
             }
         }
@@ -625,6 +634,7 @@ async fn ir_blaster_tsk(
                     Status::Error => {
                         log::error!("Error in IR blaster");
                         enable_pwm(&mut ir_blaster, &mut pwm_cfg, false);
+                        publisher.publish(crate::TaskCommand::Error).await;
                         break;
                     }
                 };
@@ -634,6 +644,35 @@ async fn ir_blaster_tsk(
             log::info!("tx done");
             enable_pwm(&mut ir_blaster, &mut pwm_cfg, false);
             publisher.publish(TaskCommand::IrTxDone).await;
+        }
+    }
+}
+
+#[embassy_executor::task]
+async fn white_led_task(mut white_led: Output<'static>, mut subscriber: MegaSubscriber) {
+    loop {
+        match subscriber.next_message_pure().await {
+            TaskCommand::ReceivedIrNec(_, _, _)
+            | TaskCommand::MidiSetPixel(_, _, _, _)
+            | TaskCommand::UsbActivity => {
+                // communication state
+                white_led.set_high();
+                Timer::after(Duration::from_millis(200)).await;
+                white_led.set_low();
+                Timer::after(Duration::from_millis(200)).await;
+            }
+
+            TaskCommand::Error => {
+                // error state
+                for _ in 0..4 {
+                    white_led.set_high();
+                    Timer::after(Duration::from_millis(50)).await;
+                    white_led.set_low();
+                    Timer::after(Duration::from_millis(50)).await;
+                }
+            }
+
+            _ => {}
         }
     }
 }

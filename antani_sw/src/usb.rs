@@ -203,6 +203,7 @@ async fn usb_control<'d, T: Instance + 'd>(
                 mega_deserialization_buf.x.clear();
 
                 publisher.publish(command).await;
+                publisher.publish(crate::TaskCommand::UsbActivity).await;
             }
             Err(e) => match e.kind {
                 capnp::ErrorKind::MessageEndsPrematurely(_, _) => {
@@ -211,6 +212,8 @@ async fn usb_control<'d, T: Instance + 'd>(
 
                 e => {
                     error!("Error deserializing message: {:?}", e);
+
+                    publisher.publish(crate::TaskCommand::Error).await;
 
                     mega_deserialization_buf.x.clear();
                 }
