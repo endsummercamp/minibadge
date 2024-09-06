@@ -5,17 +5,17 @@ use core::f64;
 
 use defmt::println;
 use defmt::unwrap;
-use embassy_executor::{InterruptExecutor, Spawner};
+use embassy_executor::Executor;
 use embassy_rp::adc;
 use embassy_rp::gpio::Input;
 use embassy_rp::gpio::Output;
 use embassy_rp::gpio::Pin;
 use embassy_rp::gpio::Pull;
-use embassy_rp::interrupt;
-use embassy_rp::interrupt::{InterruptExt, Priority};
-
+use embassy_rp::multicore::spawn_core1;
+use embassy_rp::multicore::Stack;
 use embassy_sync::pubsub::PubSubChannel;
 use embassy_sync::pubsub::Publisher;
+use embassy_sync::signal::Signal;
 use log::{info, warn};
 
 use embassy_rp::peripherals::PIO0;
@@ -54,7 +54,9 @@ use rgbeffects::FragmentShader;
 use rgbeffects::Pattern;
 use rgbeffects::RenderCommand;
 use rgbeffects::RenderManager;
+use scenes::Scenes;
 use smart_leds::RGB8;
+use static_cell::StaticCell;
 use ws2812::Ws2812;
 
 const LED_MATRIX_WIDTH: usize = 3;
@@ -206,17 +208,18 @@ enum TaskCommand {
     NextPattern,
     IncreaseBrightness,
     DecreaseBrightness,
+    SetBrightness(OutputPower),
     ResetTime,
     UsbActivity,
     Error,
     None,
 }
 
-static MEGA_CHANNEL: PubSubChannel<CriticalSectionRawMutex, TaskCommand, 8, 4, 8> =
+static MEGA_CHANNEL: PubSubChannel<CriticalSectionRawMutex, TaskCommand, 8, 8, 8> =
     PubSubChannel::new();
-type MegaPublisher = Publisher<'static, CriticalSectionRawMutex, TaskCommand, 8, 4, 8>;
+type MegaPublisher = Publisher<'static, CriticalSectionRawMutex, TaskCommand, 8, 8, 8>;
 type MegaSubscriber =
-    embassy_sync::pubsub::Subscriber<'static, CriticalSectionRawMutex, TaskCommand, 8, 4, 8>;
+    embassy_sync::pubsub::Subscriber<'static, CriticalSectionRawMutex, TaskCommand, 8, 8, 8>;
 
 // if we need to override the normal rendering with a special effect, we use this enum
 #[derive(Clone, Debug)]
@@ -226,7 +229,7 @@ enum WorkingMode {
     SpecialTimeout(RenderCommand, f64), // override normal rendering until the timeout
     RawFramebuffer(RawFramebuffer<RGB8>),
 }
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum OutputPower {
     High,
     Medium,
@@ -254,29 +257,97 @@ impl OutputPower {
     }
 }
 
-#[embassy_executor::main]
-async fn main(spawner: Spawner) {
-    info!("Program start");
-    println!("Program start");
+enum WhiteLedCommand{
+    Communication,
+    Error
+}
+
+static WHITE_LED_SIGNAL: Signal<CriticalSectionRawMutex, WhiteLedCommand> = Signal::new();
+
+static mut CORE1_STACK: Stack<8192> = Stack::new();
+static EXECUTOR0: StaticCell<Executor> = StaticCell::new();
+static EXECUTOR1: StaticCell<Executor> = StaticCell::new();
+
+#[cortex_m_rt::entry]
+fn main() -> ! {
     let p = embassy_rp::init(Default::default());
 
+    let executor0 = EXECUTOR0.init(Executor::new());
+
+    // ADC / temperature sensor
+    let adc = adc::Adc::new(p.ADC, Irqs, adc::Config::default());
+    let ts = adc::Channel::new_temp_sensor(p.ADC_TEMP_SENSOR);
+
+    // button
+
+    let user_btn = Input::new(p.PIN_8, Pull::Up);
+
+    // white led
+    let white_led = Output::new(p.PIN_20, embassy_rp::gpio::Level::Low);
+
+    // infrared stuff
+    let _ir_sens_0 = Input::new(p.PIN_9, Pull::None);
+
+    let mut pwm_cfg: pwm::Config = Default::default();
+    pwm_cfg.enable = false;
+    let ir_blaster = pwm::Pwm::new_output_b(p.PWM_SLICE5, p.PIN_11, pwm_cfg);
+
+    // leds
     let Pio {
         mut common, sm0, ..
     } = Pio::new(p.PIO0, Irqs);
 
-    let adc = adc::Adc::new(p.ADC, Irqs, adc::Config::default());
-    let ts = adc::Channel::new_temp_sensor(p.ADC_TEMP_SENSOR);
-    unwrap!(spawner.spawn(temperature(adc, ts, MEGA_CHANNEL.publisher().unwrap())));
+    let ws2812: Ws2812<'_, PIO0, 0, 9> = Ws2812::new(&mut common, sm0, p.DMA_CH0, p.PIN_19);
+
+    // scenes
+    let scenes = scenes::scenes();
+    // this is safe because this thread will always be running
+    // it's still an hack and it should be changed in some way
+    // the problem is that the scene array is GIANT and it's difficult to process in a task
+    let scenes = unsafe { core::mem::transmute::<&Scenes, &'static Scenes>(&scenes) };
+
+    spawn_core1(
+        p.CORE1,
+        unsafe { &mut *core::ptr::addr_of_mut!(CORE1_STACK) },
+        move || {
+            let executor1 = EXECUTOR1.init(Executor::new());
+            executor1.run(|spawner| unwrap!(spawner.spawn(main_tsk(ws2812, scenes))));
+        },
+    );
+
+    executor0.run(|spawner| {
+        unwrap!(spawner.spawn(temperature(adc, ts, MEGA_CHANNEL.publisher().unwrap())));
+        unwrap!(spawner.spawn(usb::usb_main(p.USB, MEGA_CHANNEL.publisher().unwrap())));
+        unwrap!(spawner.spawn(button_tsk(user_btn, MEGA_CHANNEL.publisher().unwrap())));
+        unwrap!(spawner.spawn(white_led_task(
+            white_led
+        )));
+        unwrap!(spawner.spawn(ir_receiver(
+            p.PIN_10.pin(),
+            MEGA_CHANNEL.publisher().unwrap()
+        )));
+
+        unwrap!(spawner.spawn(ir_blaster_tsk(
+            ir_blaster,
+            MEGA_CHANNEL.subscriber().unwrap(),
+            MEGA_CHANNEL.publisher().unwrap()
+        )));
+    });
+}
+
+
+#[embassy_executor::task]
+async fn main_tsk(mut ws2812: Ws2812<'static, PIO0, 0, 9>, scenes: &'static Scenes) {
+    info!("Program start");
+    println!("Program start");
 
     let mut midi_framebuffer = RawFramebuffer::new();
-    unwrap!(spawner.spawn(usb::usb_main(p.USB, MEGA_CHANNEL.publisher().unwrap())));
 
     let mut renderman = RenderManager {
         mtrx: LedMatrix::new(),
         rng: SmallRng::seed_from_u64(69420),
         persistent_data: Default::default(),
     };
-    let mut ws2812 = Ws2812::new(&mut common, sm0, p.DMA_CH0, p.PIN_19);
 
     let patterns = scenes::PATTERNS.get();
 
@@ -295,65 +366,31 @@ async fn main(spawner: Spawner) {
     let mut scene_id = 0;
     let mut out_power = OutputPower::High;
 
-    let mut user_button = Input::new(p.PIN_8, Pull::Up);
-
-    // if we start with the button pressed, function as a torch light
-    if user_button.is_low() {
-        Timer::after_millis(100).await;
-        out_power = OutputPower::High; // just to not forget to put this at the max value
-
-        working_mode = WorkingMode::Special(RenderCommand {
-            effect: Pattern::Simple(patterns.all_on),
-            color: ColorPalette::Solid((255, 255, 255).into()),
-            ..Default::default()
-        });
-
-        user_button.wait_for_high().await;
-    }
-
-    unwrap!(spawner.spawn(button_driver(
-        user_button,
-        MEGA_CHANNEL.publisher().unwrap()
-    )));
-
-    // white led
-    let white_led = Output::new(p.PIN_20, embassy_rp::gpio::Level::Low);
-
-    unwrap!(spawner.spawn(white_led_task(
-        white_led,
-        MEGA_CHANNEL.subscriber().unwrap()
-    )));
-
-    // infrared stuff
-    let _ir_sens_0 = Input::new(p.PIN_9, Pull::None);
-
-    interrupt::SWI_IRQ_1.set_priority(Priority::P3);
-    let highpriority_spawner = EXECUTOR_HIGH.start(interrupt::SWI_IRQ_1);
-    unwrap!(highpriority_spawner.spawn(ir_receiver(
-        p.PIN_10.pin(),
-        MEGA_CHANNEL.publisher().unwrap()
-    )));
-
-    let mut pwm_cfg: pwm::Config = Default::default();
-    pwm_cfg.enable = false;
-    let ir_blaster = pwm::Pwm::new_output_b(p.PWM_SLICE5, p.PIN_11, pwm_cfg);
-    unwrap!(highpriority_spawner.spawn(ir_blaster_tsk(
-        ir_blaster,
-        MEGA_CHANNEL.subscriber().unwrap(),
-        MEGA_CHANNEL.publisher().unwrap()
-    )));
-
     let mut is_transmitting = false;
 
-    let scenes = scenes::scenes();
 
-    let mega_publisher = MEGA_CHANNEL.publisher().unwrap();
-    let mut mega_subscriber = MEGA_CHANNEL.subscriber().unwrap();
+    let mega_publisher = match MEGA_CHANNEL.publisher() {
+        Ok(p) => p,
+        Err(e) => {
+            println!("Error getting publisher: {:?}", e);
+            panic!("Error getting publisher");
+        }
+    };
+
+    let mut mega_subscriber = match MEGA_CHANNEL.subscriber() {
+        Ok(p) => p,
+        Err(e) => {
+            println!("Error getting subscriber: {:?}", e);
+            panic!("Error getting subscriber");
+        }
+    };
 
     info!("Starting loop");
     mega_publisher
         .publish(TaskCommand::SendIrNec(0, 66, false))
         .await;
+
+    let mut ticker = Ticker::every(Duration::from_hz(100));
 
     let mut timer_offset = 0.0;
     loop {
@@ -425,6 +462,7 @@ async fn main(spawner: Spawner) {
 
                         _ => {}
                     }
+                    WHITE_LED_SIGNAL.signal(WhiteLedCommand::Communication);
                 }
                 TaskCommand::ShortButtonPress => {
                     mega_publisher.publish(TaskCommand::NextPattern).await;
@@ -448,6 +486,7 @@ async fn main(spawner: Spawner) {
                     midi_framebuffer.set_pixel(x as usize, y as usize, rgb);
 
                     working_mode = WorkingMode::RawFramebuffer(midi_framebuffer);
+                    WHITE_LED_SIGNAL.signal(WhiteLedCommand::Communication);
                 }
 
                 TaskCommand::SendIrNec(_, _, _) => {
@@ -501,7 +540,17 @@ async fn main(spawner: Spawner) {
                     timer_offset = Instant::now().as_micros() as f64 / 1_000_000.0;
                 }
 
-                TaskCommand::UsbActivity | TaskCommand::Error => {}
+                TaskCommand::SetBrightness(b) => {
+                    out_power = b;
+                }
+
+                TaskCommand::UsbActivity => {
+                    WHITE_LED_SIGNAL.signal(WhiteLedCommand::Communication);
+                }
+
+                TaskCommand::Error => {
+                    WHITE_LED_SIGNAL.signal(WhiteLedCommand::Error);
+                }
 
                 TaskCommand::None => {}
             }
@@ -527,16 +576,9 @@ async fn main(spawner: Spawner) {
         }
 
         ws2812.write(renderman.mtrx.get_gamma_corrected()).await;
-        Timer::after_millis(1).await;
+        ticker.next().await;
         renderman.mtrx.clear();
     }
-}
-
-static EXECUTOR_HIGH: InterruptExecutor = InterruptExecutor::new();
-
-#[interrupt]
-unsafe fn SWI_IRQ_1() {
-    EXECUTOR_HIGH.on_interrupt()
 }
 
 #[embassy_executor::task]
@@ -649,21 +691,18 @@ async fn ir_blaster_tsk(
 }
 
 #[embassy_executor::task]
-async fn white_led_task(mut white_led: Output<'static>, mut subscriber: MegaSubscriber) {
+async fn white_led_task(mut white_led: Output<'static>) {
     loop {
-        match subscriber.next_message_pure().await {
-            TaskCommand::ReceivedIrNec(_, _, _)
-            | TaskCommand::MidiSetPixel(_, _, _, _)
-            | TaskCommand::UsbActivity => {
-                // communication state
+        let led_state = WHITE_LED_SIGNAL.wait().await;
+
+        match led_state {
+            WhiteLedCommand::Communication => {
                 white_led.set_high();
                 Timer::after(Duration::from_millis(200)).await;
                 white_led.set_low();
                 Timer::after(Duration::from_millis(200)).await;
             }
-
-            TaskCommand::Error => {
-                // error state
+            WhiteLedCommand::Error => {
                 for _ in 0..4 {
                     white_led.set_high();
                     Timer::after(Duration::from_millis(50)).await;
@@ -671,8 +710,6 @@ async fn white_led_task(mut white_led: Output<'static>, mut subscriber: MegaSubs
                     Timer::after(Duration::from_millis(50)).await;
                 }
             }
-
-            _ => {}
         }
     }
 }
@@ -712,7 +749,28 @@ async fn temperature(
 }
 
 #[embassy_executor::task]
-async fn button_driver(mut button: Input<'static>, publisher: MegaPublisher) {
+async fn button_tsk(mut button: Input<'static>, publisher: MegaPublisher) {
+    // if we start with the button pressed, function as a torch light
+    if button.is_low() {
+        Timer::after_millis(100).await;
+
+        publisher
+            .publish(TaskCommand::SetWorkingMode(WorkingMode::Special(
+                RenderCommand {
+                    effect: Pattern::Simple(scenes::PATTERNS.get().all_on),
+                    color: ColorPalette::Solid((255, 255, 255).into()),
+                    ..Default::default()
+                },
+            )))
+            .await;
+
+        publisher
+            .publish(TaskCommand::SetBrightness(OutputPower::High))
+            .await;
+
+        button.wait_for_high().await;
+    }
+
     let mut press_start;
 
     loop {

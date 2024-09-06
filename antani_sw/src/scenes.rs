@@ -55,7 +55,8 @@ pub static PATTERNS: LazyLock<Patterns> = LazyLock::new(|| Patterns {
     ],
 });
 
-pub fn scenes() -> Vec<Vec<RenderCommand, 8>, 20> {
+pub type Scenes = Vec<Vec<RenderCommand, 8>, 20>;
+pub fn scenes() -> Scenes {
     let patterns = PATTERNS.get();
 
     Vec::from_slice(&[

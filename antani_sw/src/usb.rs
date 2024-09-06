@@ -13,7 +13,7 @@ use embassy_usb::class::midi::MidiClass;
 use embassy_usb::driver::EndpointError;
 use embassy_usb::{Builder, Config};
 
-use {defmt_rtt as _, panic_probe as _};
+use defmt_rtt as _;
 
 bind_interrupts!(struct Irqs {
     USBCTRL_IRQ => InterruptHandler<USB>;
