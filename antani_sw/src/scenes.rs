@@ -87,22 +87,6 @@ pub fn scenes() -> Scenes {
             ..Default::default()
         }])
         .unwrap(),
-        // glider with glitter
-        Vec::from_slice(&[
-            RenderCommand {
-                effect: Pattern::Simple(patterns.glider),
-                color: ColorPalette::Solid((0, 0, 255).into()),
-                ..Default::default()
-            },
-            RenderCommand {
-                effect: Pattern::AnimationRandom(patterns.everything_once, 300),
-                color: ColorPalette::Rainbow(0.25),
-                screen_shaders: Vec::from_slice(&[FragmentShader::LowPassWithPeak(10000.0)])
-                    .unwrap(),
-                ..Default::default()
-            },
-        ])
-        .unwrap(),
         // italy flag
         Vec::from_slice(&[
             RenderCommand {
@@ -128,21 +112,6 @@ pub fn scenes() -> Scenes {
             pattern_shaders: Vec::from_slice(&[FragmentShader::Rainbow2D(0.5)]).unwrap(),
             ..Default::default()
         }])
-        .unwrap(),
-        // double rainbow glider
-        Vec::from_slice(&[
-            RenderCommand {
-                effect: Pattern::Simple(patterns.all_on),
-                color: ColorPalette::Rainbow(0.25),
-                ..Default::default()
-            },
-            RenderCommand {
-                effect: Pattern::Simple(patterns.glider),
-                color: ColorPalette::Rainbow(0.25),
-                time_offset: 2.0,
-                ..Default::default()
-            },
-        ])
         .unwrap(),
         // rainbow 2d
         Vec::from_slice(&[RenderCommand {
