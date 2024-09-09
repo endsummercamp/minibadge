@@ -211,6 +211,7 @@ enum TaskCommand {
     SetBrightness(OutputPower),
     ResetTime,
     UsbActivity,
+    SendHidKeyboard(usbd_hid::descriptor::KeyboardUsage),
     Error,
     None,
 }
@@ -257,9 +258,9 @@ impl OutputPower {
     }
 }
 
-enum WhiteLedCommand{
+enum WhiteLedCommand {
     Communication,
-    Error
+    Error,
 }
 
 static WHITE_LED_SIGNAL: Signal<CriticalSectionRawMutex, WhiteLedCommand> = Signal::new();
@@ -317,11 +318,13 @@ fn main() -> ! {
 
     executor0.run(|spawner| {
         unwrap!(spawner.spawn(temperature(adc, ts, MEGA_CHANNEL.publisher().unwrap())));
-        unwrap!(spawner.spawn(usb::usb_main(p.USB, MEGA_CHANNEL.publisher().unwrap())));
-        unwrap!(spawner.spawn(button_tsk(user_btn, MEGA_CHANNEL.publisher().unwrap())));
-        unwrap!(spawner.spawn(white_led_task(
-            white_led
+        unwrap!(spawner.spawn(usb::usb_main(
+            p.USB,
+            MEGA_CHANNEL.publisher().unwrap(),
+            MEGA_CHANNEL.subscriber().unwrap()
         )));
+        unwrap!(spawner.spawn(button_tsk(user_btn, MEGA_CHANNEL.publisher().unwrap())));
+        unwrap!(spawner.spawn(white_led_task(white_led)));
         unwrap!(spawner.spawn(ir_receiver(
             p.PIN_10.pin(),
             MEGA_CHANNEL.publisher().unwrap()
@@ -460,6 +463,55 @@ async fn main_tsk(mut ws2812: Ws2812<'static, PIO0, 0, 9>, scenes: &'static Scen
                                 .await;
                         }
 
+                        // samsung tv remote, arrow right
+                        (7, 98, false) => {
+                            mega_publisher
+                                .publish(TaskCommand::SendHidKeyboard(
+                                    usbd_hid::descriptor::KeyboardUsage::KeyboardRightArrow,
+                                ))
+                                .await;
+                        }
+                        // left
+                        (7, 101, false) => {
+                            mega_publisher
+                                .publish(TaskCommand::SendHidKeyboard(
+                                    usbd_hid::descriptor::KeyboardUsage::KeyboardLeftArrow,
+                                ))
+                                .await;
+                        }
+                        // up
+                        (7, 96, false) => {
+                            mega_publisher
+                                .publish(TaskCommand::SendHidKeyboard(
+                                    usbd_hid::descriptor::KeyboardUsage::KeyboardUpArrow,
+                                ))
+                                .await;
+                        }
+                        // down
+                        (7, 97, false) => {
+                            mega_publisher
+                                .publish(TaskCommand::SendHidKeyboard(
+                                    usbd_hid::descriptor::KeyboardUsage::KeyboardDownArrow,
+                                ))
+                                .await;
+                        }
+                        // exit
+                        (7, 102, false) => {
+                            mega_publisher
+                                .publish(TaskCommand::SendHidKeyboard(
+                                    usbd_hid::descriptor::KeyboardUsage::KeyboardEscape,
+                                ))
+                                .await;
+                        }
+                        // enter
+                        (7, 104, false) => {
+                            mega_publisher
+                                .publish(TaskCommand::SendHidKeyboard(
+                                    usbd_hid::descriptor::KeyboardUsage::KeyboardEnter,
+                                ))
+                                .await;
+                        }
+
                         _ => {}
                     }
                     WHITE_LED_SIGNAL.signal(WhiteLedCommand::Communication);
@@ -552,7 +604,7 @@ async fn main_tsk(mut ws2812: Ws2812<'static, PIO0, 0, 9>, scenes: &'static Scen
                     WHITE_LED_SIGNAL.signal(WhiteLedCommand::Error);
                 }
 
-                TaskCommand::None => {}
+                TaskCommand::None | TaskCommand::SendHidKeyboard(_) => {}
             }
         }
 

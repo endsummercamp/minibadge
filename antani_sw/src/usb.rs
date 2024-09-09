@@ -3,12 +3,15 @@ use embassy_futures::join::join;
 use embassy_rp::bind_interrupts;
 use embassy_rp::peripherals::USB;
 use embassy_rp::usb::{Driver, Instance, InterruptHandler};
+use embassy_time::{Duration, Timer};
 use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
+use embassy_usb::class::hid::{self, HidWriter};
 use heapless::Vec;
 use log::{error, info};
 use static_cell::StaticCell;
+use usbd_hid::descriptor::{KeyboardReport, SerializedDescriptor};
 
-use crate::MegaPublisher;
+use crate::{MegaPublisher, MegaSubscriber, TaskCommand};
 use embassy_usb::class::midi::MidiClass;
 use embassy_usb::driver::EndpointError;
 use embassy_usb::{Builder, Config};
@@ -21,12 +24,13 @@ bind_interrupts!(struct Irqs {
 
 static STATE: StaticCell<State> = StaticCell::new();
 static LOGGER_STATE: StaticCell<State> = StaticCell::new();
-static CONFIG_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
+static HID_STATE: StaticCell<hid::State> = StaticCell::new();
+static CONFIG_DESCRIPTOR: StaticCell<[u8; 512]> = StaticCell::new();
 static BOS_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
 static CONTROL_BUF: StaticCell<[u8; 64]> = StaticCell::new();
 
 #[embassy_executor::task]
-pub async fn usb_main(usb: USB, publisher: MegaPublisher) {
+pub async fn usb_main(usb: USB, publisher: MegaPublisher, mut subscriber: MegaSubscriber) {
     // Create the driver, from the HAL.
     let driver = Driver::new(usb, Irqs);
 
@@ -45,7 +49,7 @@ pub async fn usb_main(usb: USB, publisher: MegaPublisher) {
     config.device_protocol = 0x01;
     config.composite_with_iads = true;
 
-    let config_descriptor = CONFIG_DESCRIPTOR.init([0; 256]);
+    let config_descriptor = CONFIG_DESCRIPTOR.init([0; 512]);
     let bos_descriptor = BOS_DESCRIPTOR.init([0; 256]);
     let control_buf = CONTROL_BUF.init([0; 64]);
 
@@ -62,6 +66,15 @@ pub async fn usb_main(usb: USB, publisher: MegaPublisher) {
 
     let state = STATE.init(State::new());
     let logger_state = LOGGER_STATE.init(State::new());
+    let hid_state = HID_STATE.init(hid::State::new());
+
+    let config = embassy_usb::class::hid::Config {
+        report_descriptor: KeyboardReport::desc(),
+        request_handler: None,
+        poll_ms: 60,
+        max_packet_size: 64,
+    };
+    let mut hid_writer = HidWriter::<_, 8>::new(&mut builder, hid_state, config);
 
     let mut cdc_class = CdcAcmClass::new(&mut builder, state, 64);
     let logger_class = CdcAcmClass::new(&mut builder, logger_state, 64);
@@ -81,6 +94,42 @@ pub async fn usb_main(usb: USB, publisher: MegaPublisher) {
 
     let usb_fut = usb.run();
 
+    let hid_fut = async {
+        loop {
+            if let TaskCommand::SendHidKeyboard(cmd) = subscriber.next_message_pure().await {
+                let report = KeyboardReport {
+                    keycodes: [cmd as u8, 0, 0, 0, 0, 0],
+                    leds: 0,
+                    modifier: 0,
+                    reserved: 0,
+                };
+                // Send the report.
+                match hid_writer.write_serialize(&report).await {
+                    Ok(()) => {}
+                    Err(e) => {
+                        warn!("Failed to send report: {:?}", e);
+                        publisher.publish(TaskCommand::Error).await;
+                    }
+                };
+                Timer::after(Duration::from_millis(100)).await;
+
+                let report = KeyboardReport {
+                    keycodes: [0, 0, 0, 0, 0, 0],
+                    leds: 0,
+                    modifier: 0,
+                    reserved: 0,
+                };
+                match hid_writer.write_serialize(&report).await {
+                    Ok(()) => {}
+                    Err(e) => {
+                        warn!("Failed to send report: {:?}", e);
+                        publisher.publish(TaskCommand::Error).await;
+                    }
+                };
+            }
+        }
+    };
+
     let midi_fut = async {
         loop {
             midi_class.wait_connection().await;
@@ -93,13 +142,17 @@ pub async fn usb_main(usb: USB, publisher: MegaPublisher) {
     let control_fut = async {
         loop {
             cdc_class.wait_connection().await;
-            log::info!("Connected");
+            info!("Connected");
             let _ = usb_control(&mut cdc_class, &publisher).await;
-            log::info!("Disconnected");
+            info!("Disconnected");
         }
     };
 
-    join(usb_fut, join(control_fut, join(log_fut, midi_fut))).await;
+    join(
+        usb_fut,
+        join(control_fut, join(log_fut, join(hid_fut, midi_fut))),
+    )
+    .await;
 }
 
 struct Disconnected {}
