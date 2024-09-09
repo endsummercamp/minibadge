@@ -55,60 +55,94 @@ use rgbeffects::Pattern;
 use rgbeffects::RenderCommand;
 use rgbeffects::RenderManager;
 use scenes::Scenes;
-use smart_leds::RGB8;
 use static_cell::StaticCell;
 use ws2812::Ws2812;
 
+// global constants
 const LED_MATRIX_WIDTH: usize = 3;
 const LED_MATRIX_HEIGHT: usize = 3;
 const LED_MATRIX_SIZE: usize = LED_MATRIX_WIDTH * LED_MATRIX_HEIGHT;
+/// set to true if RGBW leds, false if RGB
+pub const HAS_WHITE_LED: bool = false;
 
-#[derive(Clone, Copy, Default, Debug)]
-struct RawFramebuffer<T>
-where
-    T: Default + Copy,
-{
-    framebuffer: [T; LED_MATRIX_SIZE],
+#[derive(Clone, Copy, Default, Debug, PartialEq)]
+struct LedPixel {
+    r: u8,
+    g: u8,
+    b: u8,
+    w: u8,
 }
 
-impl<T> RawFramebuffer<T>
-where
-    T: Default + Copy,
-{
+impl LedPixel {
+    fn set_white(&mut self) {
+        // create white channel from rgb
+        if self.r == self.g && self.g == self.b {
+            self.w = self.r;
+            self.r = 0;
+            self.g = 0;
+            self.b = 0;
+        }
+    }
+}
+
+impl From<(u8, u8, u8)> for LedPixel {
+    fn from(rgb: (u8, u8, u8)) -> Self {
+        Self {
+            r: rgb.0,
+            g: rgb.1,
+            b: rgb.2,
+            w: 0,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Default, Debug)]
+struct RawFramebuffer {
+    framebuffer: [LedPixel; LED_MATRIX_SIZE],
+}
+
+impl RawFramebuffer {
     fn new() -> Self {
         Self {
-            framebuffer: [T::default(); LED_MATRIX_SIZE],
+            framebuffer: [LedPixel::default(); LED_MATRIX_SIZE],
         }
     }
 
-    fn set_pixel(&mut self, x: usize, y: usize, colour: T) {
+    fn set_pixel(&mut self, x: usize, y: usize, colour: LedPixel) {
         if x < LED_MATRIX_WIDTH && y < LED_MATRIX_HEIGHT {
-            self.framebuffer[y * LED_MATRIX_WIDTH + x] = colour;
+            let color = LedPixel {
+                r: colour.r,
+                g: colour.g,
+                b: colour.b,
+                w: 0,
+            };
+            self.framebuffer[y * LED_MATRIX_WIDTH + x] = color;
         }
     }
 
-    fn get_pixel(&self, x: usize, y: usize) -> T {
+    fn get_pixel(&self, x: usize, y: usize) -> LedPixel {
         if x < LED_MATRIX_WIDTH && y < LED_MATRIX_HEIGHT {
             self.framebuffer[y * LED_MATRIX_WIDTH + x]
         } else {
-            T::default()
+            LedPixel::default()
         }
     }
 
-    fn set_all(&mut self, rgb: T) {
-        for i in 0..LED_MATRIX_SIZE {
-            self.framebuffer[i] = rgb;
-        }
+    fn set_all(&mut self, rgb: LedPixel) {
+        self.framebuffer.iter_mut().for_each(|led| *led = rgb);
+    }
+    fn update_rgbw(&mut self) {
+        self.framebuffer.iter_mut().for_each(|led| led.set_white());
     }
 
-    fn get_raw(&self) -> &[T; LED_MATRIX_SIZE] {
+    fn get_raw(&self) -> &[LedPixel; LED_MATRIX_SIZE] {
         &self.framebuffer
     }
 }
 
 struct LedMatrix {
-    raw_framebuffer: RawFramebuffer<RGB8>,
-    gamma_corrected_framebuffer: RawFramebuffer<RGB8>,
+    raw_framebuffer: RawFramebuffer,
+    gamma_corrected_framebuffer: RawFramebuffer,
     corrected_gain: f32,
     raw_gain: f32,
 }
@@ -131,11 +165,11 @@ impl LedMatrix {
         self.raw_gain = gain;
     }
 
-    fn get_pixel(&self, x: usize, y: usize) -> RGB8 {
+    fn get_pixel(&self, x: usize, y: usize) -> LedPixel {
         self.raw_framebuffer.get_pixel(x, y)
     }
 
-    fn set_pixel(&mut self, x: usize, y: usize, colour: RGB8) {
+    fn set_pixel(&mut self, x: usize, y: usize, colour: LedPixel) {
         self.raw_framebuffer.set_pixel(x, y, colour);
     }
 
@@ -158,35 +192,31 @@ impl LedMatrix {
         for i in 0..LED_MATRIX_SIZE {
             let colour = self.raw_framebuffer.framebuffer[i];
 
-            let colour = RGB8 {
-                r: (colour.r as f32 * self.corrected_gain) as u8,
-                g: (colour.g as f32 * self.corrected_gain) as u8,
-                b: (colour.b as f32 * self.corrected_gain) as u8,
-            };
-
-            let colour = RGB8 {
-                r: GAMMA_CORRECTION[colour.r as usize],
-                g: GAMMA_CORRECTION[colour.g as usize],
-                b: GAMMA_CORRECTION[colour.b as usize],
-            };
-
-            let colour = RGB8 {
-                r: (colour.r as f32 * self.raw_gain) as u8,
-                g: (colour.g as f32 * self.raw_gain) as u8,
-                b: (colour.b as f32 * self.raw_gain) as u8,
+            let colour = LedPixel {
+                r: (GAMMA_CORRECTION[(colour.r as f32 * self.corrected_gain) as usize] as f32
+                    * self.raw_gain) as u8,
+                g: (GAMMA_CORRECTION[(colour.g as f32 * self.corrected_gain) as usize] as f32
+                    * self.raw_gain) as u8,
+                b: (GAMMA_CORRECTION[(colour.b as f32 * self.corrected_gain) as usize] as f32
+                    * self.raw_gain) as u8,
+                w: (GAMMA_CORRECTION[(colour.w as f32 * self.corrected_gain) as usize] as f32
+                    * self.raw_gain) as u8,
             };
 
             self.gamma_corrected_framebuffer.framebuffer[i] = colour;
         }
     }
 
-    fn set_all(&mut self, rgb: RGB8) {
+    fn set_all(&mut self, rgb: LedPixel) {
         self.raw_framebuffer.set_all(rgb);
     }
 
-    fn get_gamma_corrected(&mut self) -> &[RGB8; LED_MATRIX_SIZE] {
+    fn get_gamma_corrected(&mut self) -> &[LedPixel; LED_MATRIX_SIZE] {
         self.update_gamma_correction_and_gain();
 
+        if HAS_WHITE_LED {
+            self.gamma_corrected_framebuffer.update_rgbw();
+        }
         self.gamma_corrected_framebuffer.get_raw()
     }
 
@@ -228,7 +258,7 @@ enum WorkingMode {
     Normal,                             // normal rendering, user selecting the patterns etc
     Special(RenderCommand), // override normal rendering until the user presses the button
     SpecialTimeout(RenderCommand, f64), // override normal rendering until the timeout
-    RawFramebuffer(RawFramebuffer<RGB8>),
+    RawFramebuffer(RawFramebuffer),
 }
 #[derive(Clone, Debug)]
 enum OutputPower {
@@ -338,7 +368,6 @@ fn main() -> ! {
     });
 }
 
-
 #[embassy_executor::task]
 async fn main_tsk(mut ws2812: Ws2812<'static, PIO0, 0, 9>, scenes: &'static Scenes) {
     info!("Program start");
@@ -370,7 +399,6 @@ async fn main_tsk(mut ws2812: Ws2812<'static, PIO0, 0, 9>, scenes: &'static Scen
     let mut out_power = OutputPower::High;
 
     let mut is_transmitting = false;
-
 
     let mega_publisher = match MEGA_CHANNEL.publisher() {
         Ok(p) => p,
@@ -526,7 +554,7 @@ async fn main_tsk(mut ws2812: Ws2812<'static, PIO0, 0, 9>, scenes: &'static Scen
                 }
 
                 TaskCommand::MidiSetPixel(x, y, channel, value) => {
-                    let px: RGB8 = midi_framebuffer.get_pixel(x as usize, y as usize);
+                    let px = midi_framebuffer.get_pixel(x as usize, y as usize);
 
                     let rgb = match channel {
                         0 => (value, px.g, px.b).into(),

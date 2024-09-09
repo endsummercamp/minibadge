@@ -10,7 +10,7 @@ use fixed::types::U24F8;
 use fixed_macro::fixed;
 
 use embassy_rp::{clocks, into_ref, Peripheral, PeripheralRef};
-use smart_leds::RGB8;
+use smart_leds::{RGB8, RGBA};
 
 pub struct Ws2812<'d, P: Instance, const S: usize, const N: usize> {
     dma: PeripheralRef<'d, dma::AnyChannel>,
@@ -74,7 +74,7 @@ impl<'d, P: Instance, const S: usize, const N: usize> Ws2812<'d, P, S, N> {
         cfg.fifo_join = FifoJoin::TxOnly;
         cfg.shift_out = ShiftConfig {
             auto_fill: true,
-            threshold: 24,
+            threshold: if crate::HAS_WHITE_LED { 32 } else { 24 },
             direction: ShiftDirection::Left,
         };
 
@@ -87,13 +87,19 @@ impl<'d, P: Instance, const S: usize, const N: usize> Ws2812<'d, P, S, N> {
         }
     }
 
-    pub async fn write(&mut self, colors: &[RGB8; N]) {
+    pub async fn write(&mut self, colors: &[crate::LedPixel; N]) {
         // Precompute the word bytes from the colors
         let mut words = [0u32; N];
         for i in 0..N {
             let word = (u32::from(colors[i].g) << 24)
                 | (u32::from(colors[i].r) << 16)
-                | (u32::from(colors[i].b) << 8);
+                | (u32::from(colors[i].b) << 8)
+                | if crate::HAS_WHITE_LED {
+                    u32::from(colors[i].w)
+                } else {
+                    0
+                };
+
             words[i] = word;
         }
 

@@ -2,9 +2,8 @@ use core::f64;
 use heapless::Vec;
 use num_traits::real::Real;
 use rand::{rngs::SmallRng, Rng};
-use smart_leds::RGB8;
 
-use crate::{LedMatrix, RawFramebuffer};
+use crate::{LedMatrix, LedPixel, RawFramebuffer};
 
 pub type LedPattern = u16;
 
@@ -20,7 +19,7 @@ pub struct RenderCommand {
 #[derive(Clone, Default)]
 pub struct ShaderPersistentData {
     pub frame_counter: u32,
-    pub lowpass: RawFramebuffer<RGB8>,
+    pub lowpass: RawFramebuffer,
 }
 
 pub struct RenderManager {
@@ -76,7 +75,7 @@ impl RenderManager {
     }
 }
 
-fn hsl2rgb(h: f64, s: f64, l: f64) -> RGB8 {
+fn hsl2rgb(h: f64, s: f64, l: f64) -> LedPixel {
     let h = h * 360.0;
     let c = (1.0 - (2.0 * l - 1.0).abs()) * s;
     let x = c * (1.0 - ((h / 60.0) % 2.0 - 1.0).abs());
@@ -112,11 +111,11 @@ impl FragmentShader {
     fn render(
         &self,
         t: f64,
-        color: RGB8,
+        color: LedPixel,
         x: usize,
         y: usize,
         renderman: &mut RenderManager,
-    ) -> RGB8 {
+    ) -> LedPixel {
         match self {
             FragmentShader::Breathing(speed) => {
                 let t = t * *speed as f64;
@@ -185,8 +184,8 @@ impl FragmentShader {
 #[derive(Clone, Debug)]
 pub enum ColorPalette {
     Rainbow(f32), // speed
-    Solid(RGB8),
-    Custom(Vec<RGB8, 16>, f32), // palette, speed
+    Solid(LedPixel),
+    Custom(Vec<LedPixel, 16>, f32), // palette, speed
 }
 
 impl Default for ColorPalette {
@@ -196,7 +195,7 @@ impl Default for ColorPalette {
 }
 
 impl ColorPalette {
-    fn render(&self, t: f64) -> RGB8 {
+    fn render(&self, t: f64) -> LedPixel {
         match self {
             ColorPalette::Rainbow(speed) => hsl2rgb((t * *speed as f64) % 1.0, 1.0, 0.5),
             ColorPalette::Solid(rgb) => *rgb,

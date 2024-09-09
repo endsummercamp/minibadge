@@ -1,9 +1,8 @@
 use capnp::{message::ReaderOptions, serialize};
-use smart_leds::RGB8;
 
 use crate::{
     rgbeffects::{ColorPalette, RenderCommand},
-    usb_messages_capnp, RawFramebuffer, TaskCommand,
+    usb_messages_capnp, LedPixel, RawFramebuffer, TaskCommand,
 };
 
 pub fn deserialize_message(data: &mut &[u8]) -> Result<TaskCommand, capnp::Error> {
@@ -15,7 +14,7 @@ pub fn deserialize_message(data: &mut &[u8]) -> Result<TaskCommand, capnp::Error
 
     match badgebound.which()? {
         usb_messages_capnp::badge_bound::SetFrameBuffer(set_fb) => {
-            let mut ret: RawFramebuffer<RGB8> = RawFramebuffer::new();
+            let mut ret: RawFramebuffer = RawFramebuffer::new();
 
             let pixels = set_fb?.get_pixels()?;
             for i in 0..9 {
@@ -27,10 +26,11 @@ pub fn deserialize_message(data: &mut &[u8]) -> Result<TaskCommand, capnp::Error
                 ret.set_pixel(
                     x as usize,
                     y as usize,
-                    RGB8 {
+                    LedPixel {
                         r: pixel.get_r(),
                         g: pixel.get_g(),
                         b: pixel.get_b(),
+                        ..Default::default()
                     },
                 );
             }
@@ -42,10 +42,11 @@ pub fn deserialize_message(data: &mut &[u8]) -> Result<TaskCommand, capnp::Error
         usb_messages_capnp::badge_bound::SetSolidColor(color) => {
             let color = color?;
 
-            let color = RGB8 {
+            let color = LedPixel {
                 r: color.get_r(),
                 g: color.get_g(),
                 b: color.get_b(),
+                ..Default::default()
             };
 
             let scene = RenderCommand {
