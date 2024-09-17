@@ -42,7 +42,7 @@
 
 
 % These define global texts that are used in headers and titles.
-\title{\includegraphics[height=2cm]{logo} \raisebox{1\height}{Hardware mini-badge}}
+\title{\includegraphics[height=2cm]{logo} \raisebox{1\height}{Hardware mini-badge "P2N"}}
 \author{End Summer Camp}
 \date{Settembre 2024}
 \company{https://t.me/endsummercamp}
@@ -112,7 +112,7 @@
 	
 	% Switch to next column
 	\vfill\break
-	
+	\vspace*{-30pt}
 	\begin{center}
 		\includegraphics[scale=0.75]{gpio}
 
@@ -124,7 +124,7 @@
 			\draw (1, 1) node {\circled{4}};
 			\draw (-2, 0) node {\circled{5}};
 			\draw (3.1, -0.3) node {\circled{6}};
-			\draw (2.5, -0.81) node {\circled{7}};
+			\draw (2.45, -0.81) node {\circled{7}};
 			\draw (-0.9, -1.4) node {\circled{8}};
 			\draw (0.7, -1.65) node {\circled{9}};
 			\draw (-2.15, -1.8) node {\circled{10}};
@@ -134,16 +134,19 @@
 	\end{center}
 \vspace*{-20pt}
 \section{USB}
-Collegando il badge ad una porta USB di un computer, appaiono 3 dispositivi, qui in esempio:
-\begin{itemize}
+Collegando il badge ad una porta USB di un computer, si presentano 4 dispositivi, qui in esempio:
+\vspace*{-10pt}
+\begin{itemize}[itemsep=1pt]
 	\item {\textbf{\texttt{/dev/midi1}}, si possono regolare i colori di ogni led inviando eventi midi al badge, ogni canale (RGB) di ogni LED è una "nota", la "velocità" è il valore (midi da 0-127 mappato a 0-255)}
-	\item{\textbf{\texttt{/dev/ttyACM0}}, seriale virtuale di controllo, utilizzabile con il tool da linea di comando ufficiale, o con qualsiasi altro tool che implementa il protocollo secondo lo schema \textit{Cap'n Proto} presente nel sorgente}
-	\item{\textbf{\texttt{/dev/ttyACM1}}, seriale virtuale di debug, in cui vengono inviati i log}
+	\item{\textbf{\texttt{/dev/ttyACM0}}, seriale di controllo, utilizzabile con il tool da linea di comando ufficiale, o con qualsiasi altro tool che implementa il protocollo secondo lo schema \textit{Cap'n Proto} presente nel sorgente}
+	\item{\textbf{\texttt{/dev/ttyACM1}}, seriale di debug, in cui vengono inviati i log}
+	\item{\textbf{\texttt{/dev/input/event0}}}, per i telecomandi supportati, il badge emulerà una tastiera HID e invierà gli eventi al computer
 \end{itemize}
-
+\vspace*{-10pt}
 \section{CLI}
 È disponibile un tool da linea di comando per controllare il badge da un computer attraverso la porta USB \\
 Sono controllabili i LED e il transceiver infrarosso
+\vspace*{-5pt}
 \section{Sorgente}
 Il badge è organizzato in un unico repository, contenente hardware, firmware e tool da linea di comando.\\
 
