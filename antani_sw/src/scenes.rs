@@ -174,6 +174,13 @@ pub fn scenes() -> Scenes {
             ..Default::default()
         }])
         .unwrap(),
+        // off
+        Vec::from_slice(&[RenderCommand {
+            effect: Pattern::Simple(0),
+            color: ColorPalette::Solid((0, 0, 0).into()),
+            ..Default::default()
+        }])
+        .unwrap(),
     ])
     .unwrap()
 }
