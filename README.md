@@ -25,6 +25,23 @@ This is the first official ESC badge with a microcontroller!
 - Torchlight mode (power up with the button held down)
 - to be continued...
 
+## Light Effects
+
+The badge emits different light effects. Gently press the USER key to select the next effect.
+
+1. hacker glider I'm Blue (default)
+2. hacker glider Hulk
+3. hacker glider Redder
+4. hacker glider I'm Blue pulsing
+5. IO SONO GIORGIA
+6. hacker glider pride
+7. gigaPride
+8. gigaRedder
+9. gigaHulk
+10. gigaBlue
+11. gigaWhite (torch)
+12. under arrest
+
 ## Project Structure
 
 - `antani_hw/`: Contains the hardware design files, KiCad project.
