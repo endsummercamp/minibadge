@@ -34,6 +34,7 @@
 
 \usepackage{graphicx}
 \graphicspath{ {.} }
+\setlength{\tabcolsep}{4pt}
 
 %\setstretch {0.75}
 
@@ -52,9 +53,19 @@
 \begin{document}
 	\maketitle
 	
-	\section{Features}
+	\section{Introduzione}
+	Hai fra le mani il badge "P2N", ovvero il gadget Open Source dell'evento End Summer Camp 2024.
+	Rispetto alla versione "P1N", questo dispositivo è basato sul chip RP2040, introduce una splendida matrice LED 3x3 ARGB, molteplici interfacce,
+	il 110\% di effetti luminosi in più ed un ricevitore infrarossi.
+	
+	\section{Avvertenze}
+	Il dispositivo può emettere forti e improvvise irradiazioni fotoniche.
+	Prima dell'accensione, indossare gli appositi occhiali da saldatura
+	(non inclusi).
+	
+	\section{Funzionalità}
 	\begin{tabular}{l l}
-		  \begin{minipage}{1.5in}
+		  \begin{minipage}{1.45in}
 
 				\begin{enumerate}[itemsep=1pt]
 				\item{GPIO di espansione}
@@ -62,7 +73,7 @@
 				\item{JTAG (Tag-Connect)}
 				\item{RP2040}
 				\item{USB power+dati}
-				\item{LED / trasmettitore IR}
+				\item{LED/trasmettitore IR}
 
 			\end{enumerate} 
 			
@@ -74,9 +85,9 @@
 			\item{pulsante USER}
 			\item{pulsante BOOT}
 			\item{pad alimentazione}
-			\item{pad di espansione stringa LED}
-			\item{ricevitore IR}
-			\item LED ws2812b / sk6812
+			\item{espansione stringa LED}
+			\item{ricevitore infrarossi}
+			\item LED ws2812b/sk6812
 			\end{enumerate} 
 			
 		\end{minipage}
@@ -85,30 +96,27 @@
 	
 	\section{Utilizzo}
 	
-	\begin{itemize}[itemsep=1pt] 
-		\item{premere USER per cambiare animazione}
-		\item{tenere premuto USER per regolare la potenza}
-		\item{tenere premuto USER all'avvio per "torcia"}
-		\item{tenere premuto BOOT all'avvio per bootloader USB}
+	\begin{itemize}[itemsep=1pt]
+		\item{collegare l'USB C ad un'alimentazione a 5V}
+		\item{per variare le 12+ animazioni, premere USER}
+		\item{per regolare le 4 intensità, tenere premuto USER}
+		\item{per attivare la torcia, tenere premuto USER all'avvio}
+		\item{per il bootloader USB, tenere premuto BOOT all'avvio}
 	\end{itemize}
 	
 
 	\begin{center}
 
 		\begin{tikzpicture}
-	\draw (0, 0) node[inner sep=0] {\includegraphics[width=5.9cm]{back}};
-	\draw (1.95, 1.95) node {\circled{12}};
+	\draw (0, 0) node[inner sep=0] {\includegraphics[width=3cm]{back}};
+	\draw (1, 1) node {\circled{12}};
 
 \end{tikzpicture}
 	\end{center}
-		Visto frontalmente, il badge è pensato per essere orientato con la porta USB in alto. 
+		Visione frontale, con la porta USB rivolta in alto. 
 		
-		\section{IR}
-		Il badge è controllabile a distanza attraverso il ricevitore infrarosso.
-		
-		È supportata la ricezione di messaggi secondo il protocollo NEC, e la sua variante di Samsung
-		
-		La lista dei comandi e la loro funzione può variare velocemente, consulta il repository su Github per informazioni aggiornate
+		\section{Ricevitore Infrarossi}
+		Puoi controllare il badge a distanza attraverso infrarossi NEC (o variante Samsung) come da info allegate al repository.
 	
 	% Switch to next column
 	\vfill\break
@@ -132,24 +140,23 @@
 		\end{tikzpicture}
 		
 	\end{center}
-\vspace*{-20pt}
-\section{USB}
-Collegando il badge ad una porta USB di un computer, si presentano 4 dispositivi, qui in esempio:
+\vspace*{-10pt}
+\section{Porta USB}
+Collegando il badge ad una porta USB di un computer, si aggiungeranno 4 interfacce. Ad esempio:
 \vspace*{-10pt}
 \begin{itemize}[itemsep=1pt]
-	\item {\textbf{\texttt{/dev/midi1}}, si possono regolare i colori di ogni led inviando eventi midi al badge, ogni canale (RGB) di ogni LED è una "nota", la "velocità" è il valore (midi da 0-127 mappato a 0-255)}
+	\item {\textbf{\texttt{/dev/midi1}}, si possono regolare i colori di ogni LED inviando eventi MIDI al badge: ogni canale (RGB) di ogni LED è una "nota", mentre l'intensità è il valore MIDI (da 0-127 mappato a 0-255)}
 	\item{\textbf{\texttt{/dev/ttyACM0}}, seriale di controllo, utilizzabile con il tool da linea di comando ufficiale, o con qualsiasi altro tool che implementa il protocollo secondo lo schema \textit{Cap'n Proto} presente nel sorgente}
-	\item{\textbf{\texttt{/dev/ttyACM1}}, seriale di debug, in cui vengono inviati i log}
-	\item{\textbf{\texttt{/dev/input/event0}}}, per i telecomandi supportati, il badge emulerà una tastiera HID e invierà gli eventi al computer
+	\item{\textbf{\texttt{/dev/ttyACM1}}, seriale di debug che trasmette log}
+	\item{\textbf{\texttt{/dev/input/event0}}}, il badge si presenta come tastiera HID ricevendo i tasti di un telecomando IR supportato
 \end{itemize}
 \vspace*{-10pt}
-\section{CLI}
-È disponibile un tool da linea di comando per controllare il badge da un computer attraverso la porta USB \\
-Sono controllabili i LED e il transceiver infrarosso
+\section{Interfaccia a Riga di Comando}
+È disponibile un tool per controllare il badge da un computer attraverso la sua porta USB, per
+controllare i LED e il transceiver infrarosso.
 \vspace*{-5pt}
-\section{Sorgente}
-Il badge è organizzato in un unico repository, contenente hardware, firmware e tool da linea di comando.\\
-
+\section{Sorgente e altra Documentazione}
+Tutto il materiale è organizzato in un unico repository, contenente hardware, firmware e tool da linea di comando.\\
 \texttt{https://github.com/endsummercamp/minibadge}
 %\section{Note}
 %Il badge \textbf{non} contiene un BMS, consultare lo schema prima di collegare una batteria ai pad di alimentazione.

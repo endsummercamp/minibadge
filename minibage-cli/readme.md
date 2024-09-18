@@ -4,7 +4,8 @@ This is the command line tool for the End Summer Camp Mini Badge.
 
 ## Usage
 
-If you don't have a Rust toolchain installed, follow the instructions in the firmware readme.
+If you don't have a Rust toolchain installed, follow the instructions in the firmware readme
+(directory `/antani_sw`).
 
 To run the CLI tool, just run `cargo run -- --help` in this directory.
 
