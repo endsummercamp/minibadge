@@ -491,7 +491,24 @@ async fn main_tsk(mut ws2812: Ws2812<'static, PIO0, 0, 9>, scenes: &'static Scen
                                 .await;
                         }
 
-                        // samsung tv remote, arrow right
+                        // samsung tv remote
+                        // volume up
+                        (7, 7, false) => {
+                            mega_publisher
+                                .publish(TaskCommand::SendHidKeyboard(
+                                    usbd_hid::descriptor::KeyboardUsage::KeyboardVolumeUp,
+                                ))
+                                .await;
+                        }
+                        // volume down
+                        (7, 11, false) => {
+                            mega_publisher
+                                .publish(TaskCommand::SendHidKeyboard(
+                                    usbd_hid::descriptor::KeyboardUsage::KeyboardVolumeDown,
+                                ))
+                                .await;
+                        }
+                        //arrow right
                         (7, 98, false) => {
                             mega_publisher
                                 .publish(TaskCommand::SendHidKeyboard(

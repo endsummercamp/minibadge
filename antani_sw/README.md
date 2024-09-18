@@ -6,7 +6,14 @@ This is the firmware for the End Summer Camp Mini Badge.
 
 You need to have a working Rust toolchain installed. You can install it with your distribution's package manager, or follow the instructions on the [Rust website](https://www.rust-lang.org/tools/install).
 
-When you have a working "cargo" command, you can build and flash the firmware with the following steps:
+When you have a working "cargo" command, install some tools
+
+- `rustup target add thumbv6m-none-eabi`
+- `cargo install flip-link`
+- `cargo install elf2uf2-rs`
+
+
+you can then build and flash the firmware with the following steps:
 
 1. Clone this repository and navigate to the `antani_sw` directory
 2. Disconnect the badge from USB
