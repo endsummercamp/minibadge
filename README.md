@@ -50,8 +50,35 @@ The badge emits different light effects. Gently press the USER key to select the
 - `minibadge-cli/`: Contains the CLI tool to interact with the badge from a computer.
 - `docs/`: Contains all the documentation for the project.
 
+## Badge Project Credits
+
+**Special Badge Credits:**
+
+- [Kezii](https://github.com/Kezii) - Supreme Badge Warlord, Supreme Circuitry Alchemist, Soldering Paste Virtuoso
+- sebastiano: Project Heritage Continuity Director, Glider Specifications and Quality Assurance Authority, Grandmaster of Antani
+
+**All Badge Project Credits:**
+
+- [arves100](https://github.com/arves100) - Crisis Simulation Director, Lead of Electronic Waste Generation
+- [Bildcraft1](https://github.com/Bildcraft1) - Operator of Electronic Waste Generation, Chief of Sound Engineering
+- [bozz](https://boz.reyboz.it/) - Chief User Documentation Auditor
+- claudio - Chief Troop Nutrition & Gastronomic, Potato-Logistics Manager, Culinary Trade Secrets Trustkeeper
+- [d4nyl0](https://github.com/d4nyl0) - Metal Fusion Operator, User Documentation Auditor
+- [davidecaminati](https://github.com/davidecaminati) - Scam Advisor, Print Specialist
+- DragonEnergy - Troop Nutrition Chemistry Master, Potato Pipeline Operator
+- DuckDuckGo's AI - Human Capital Elevator
+- [e1c4mp3r0](https://github.com/e1c4mp3r0) - Lights FX Terminologist, User Documentation Layout Supervisor
+- fagianodorato99 - Fotonic Radiators Deployer
+- [k3lite](https://github.com/k3lite) - Badge Flame Leader, Metal Fusion Operator, User Documentation Auditor
+- [LucentW](https://github.com/LucentW) - Chief Ethereal Access Sigils Provisioner
+- [MassiveBox](https://github.com/MassiveBox) - VIP Stress Management Specialist
+- Mike - Troop Nutrition Operator, Potato Pipeline Operator
+- [neonsn0w](https://github.com/neonsn0w) - Operator of Electronic Waste Generation
+- [ru-ka](https://github.com/ru-ka) - Head of VIP Fashion Expression, Nutritional Lifestyle VIP Coach
+- ZioFrenk - Monocular Fotonic Radiators Deployer
+
 ## License
 
-The software is released under the GNU Genera Public License, version 3.
+The software is released under the GNU General Public License, version 3.
 
 The hardware schema is released under the CERN Open Hardware Licence Version 2 - Permissive.
