@@ -43,9 +43,9 @@
 
 
 % These define global texts that are used in headers and titles.
-\title{\includegraphics[height=2cm]{logo} \raisebox{1\height}{Hardware mini-badge "P2N"}}
+\title{\includegraphics[height=2cm]{logo} \raisebox{1\height}{Mini-badge "P2N" - Manuale Tascabile}}
 \author{End Summer Camp}
-\date{Settembre 2024}
+\date{19 Settembre 2024}
 \company{https://t.me/endsummercamp}
 \author{Kezi, ESC Badge Team}
 \companylogo{\includegraphics[scale=0.6]{logo}}
@@ -55,8 +55,7 @@
 	
 	\section{Introduzione}
 	Hai fra le mani il badge "P2N", ovvero il gadget Open Source dell'evento End Summer Camp 2024.
-	Rispetto alla versione "P1N", questo dispositivo è basato sul chip RP2040, introduce una splendida matrice LED 3x3 ARGB, molteplici interfacce,
-	il 110\% di effetti luminosi in più ed un ricevitore infrarossi.
+	Rispetto alla versione precedente ("P1N") questo dispositivo è basato sul chip RP2040, introduce una splendida matrice LED 3x3 ARGB, espone molteplici interfacce USB, ha il 110\% di effetti luminosi in più e supporta ricezione e trasmissione via infrarossi.
 	
 	\section{Avvertenze}
 	Il dispositivo può emettere forti e improvvise irradiazioni fotoniche.
@@ -115,8 +114,8 @@
 	\end{center}
 		Visione frontale, con la porta USB rivolta in alto. 
 		
-		\section{Ricevitore Infrarossi}
-		Puoi controllare il badge a distanza attraverso infrarossi NEC (o variante Samsung) come da info allegate al repository.
+		\section{Ricezione/Trasmissione Infrarossi}
+		Puoi interagire col badge a distanza attraverso infrarossi NEC (o variante Samsung). Vedi info allegate al repository.
 	
 	% Switch to next column
 	\vfill\break
@@ -152,11 +151,12 @@ Collegando il badge ad una porta USB di un computer, si aggiungeranno 4 interfac
 \end{itemize}
 \vspace*{-10pt}
 \section{Interfaccia a Riga di Comando}
-È disponibile un tool per controllare il badge da un computer attraverso la sua porta USB, per
-controllare i LED e il transceiver infrarosso.
+Puoi usare il tuo computer per controllare il badge tramite USB.
+Con il tool ufficiale puoi personalizzare facilmente i LED e comunicare con il transceiver infrarosso.
 \vspace*{-5pt}
-\section{Sorgente e altra Documentazione}
-Tutto il materiale è organizzato in un unico repository, contenente hardware, firmware e tool da linea di comando.\\
+\section{Sorgente, Documentazione, Licenze}
+Tutto il materiale è organizzato in un unico repository, contenente hardware, firmware, tool da CLI e licenze libere.\\
+La pagina che stai leggendo è rilasciata nel pubblico dominio.\\
 \texttt{https://github.com/endsummercamp/minibadge}
 %\section{Note}
 %Il badge \textbf{non} contiene un BMS, consultare lo schema prima di collegare una batteria ai pad di alimentazione.
