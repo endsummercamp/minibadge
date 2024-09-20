@@ -636,14 +636,6 @@ async fn main_tsk(mut ws2812: Ws2812<'static, PIO0, 0, 9>, scenes: &'static Scen
                                 ))
                                 .await;
                         }
-                        // play
-                        (7, 71, false) => {
-                            mega_publisher
-                                .publish(TaskCommand::SendHidKeyboard(
-                                    usbd_hid::descriptor::KeyboardUsage::KeyboardPlay,
-                                ))
-                                .await;
-                        }
 
                         _ => {}
                     }
