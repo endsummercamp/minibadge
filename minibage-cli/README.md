@@ -7,6 +7,9 @@ This is the command line tool for the End Summer Camp Mini Badge.
 If you don't have a Rust toolchain installed, follow the instructions in the firmware readme
 (directory `/antani_sw`).
 
+Additionally, the build process requires the `capnp` binary to be installed in
+your system. Please be sure it is installed before running the CLI tool.
+
 To run the CLI tool, just run `cargo run -- --help` in this directory.
 
 ```
