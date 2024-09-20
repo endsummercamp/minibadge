@@ -79,6 +79,6 @@ All credits:
 
 ## License
 
-The software is released under the GNU Genera Public License, version 3.
+The software is released under the GNU General Public License, version 3.
 
 The hardware schema is released under the CERN Open Hardware Licence Version 2 - Permissive.
