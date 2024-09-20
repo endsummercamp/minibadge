@@ -556,6 +556,94 @@ async fn main_tsk(mut ws2812: Ws2812<'static, PIO0, 0, 9>, scenes: &'static Scen
                                 ))
                                 .await;
                         }
+                        // 1
+                        (7, 4, false) => {
+                            mega_publisher
+                                .publish(TaskCommand::SendHidKeyboard(
+                                    usbd_hid::descriptor::KeyboardUsage::Keyboard1Exclamation,
+                                ))
+                                .await;
+                        }
+                        // 2
+                        (7, 5, false) => {
+                            mega_publisher
+                                .publish(TaskCommand::SendHidKeyboard(
+                                    usbd_hid::descriptor::KeyboardUsage::Keyboard2At,
+                                ))
+                                .await;
+                        }
+                        // 3
+                        (7, 6, false) => {
+                            mega_publisher
+                                .publish(TaskCommand::SendHidKeyboard(
+                                    usbd_hid::descriptor::KeyboardUsage::Keyboard3Hash,
+                                ))
+                                .await;
+                        }
+                        // 4
+                        (7, 8, false) => {
+                            mega_publisher
+                                .publish(TaskCommand::SendHidKeyboard(
+                                    usbd_hid::descriptor::KeyboardUsage::Keyboard4Dollar,
+                                ))
+                                .await;
+                        }
+                        // 5
+                        (7, 9, false) => {
+                            mega_publisher
+                                .publish(TaskCommand::SendHidKeyboard(
+                                    usbd_hid::descriptor::KeyboardUsage::Keyboard5Percent,
+                                ))
+                                .await;
+                        }
+                        // 6
+                        (7, 10, false) => {
+                            mega_publisher
+                                .publish(TaskCommand::SendHidKeyboard(
+                                    usbd_hid::descriptor::KeyboardUsage::Keyboard6Caret,
+                                ))
+                                .await;
+                        }
+                        // 7
+                        (7, 12, false) => {
+                            mega_publisher
+                                .publish(TaskCommand::SendHidKeyboard(
+                                    usbd_hid::descriptor::KeyboardUsage::Keyboard7Ampersand,
+                                ))
+                                .await;
+                        }
+                        // 8
+                        (7, 13, false) => {
+                            mega_publisher
+                                .publish(TaskCommand::SendHidKeyboard(
+                                    usbd_hid::descriptor::KeyboardUsage::Keyboard8Asterisk,
+                                ))
+                                .await;
+                        }
+                        // 9
+                        (7, 14, false) => {
+                            mega_publisher
+                                .publish(TaskCommand::SendHidKeyboard(
+                                    usbd_hid::descriptor::KeyboardUsage::Keyboard9OpenParens,
+                                ))
+                                .await;
+                        }
+                        // mute
+                        (7, 15, false) => {
+                            mega_publisher
+                                .publish(TaskCommand::SendHidKeyboard(
+                                    usbd_hid::descriptor::KeyboardUsage::KeyboardMute,
+                                ))
+                                .await;
+                        }
+                        // play
+                        (7, 71, false) => {
+                            mega_publisher
+                                .publish(TaskCommand::SendHidKeyboard(
+                                    usbd_hid::descriptor::KeyboardUsage::KeyboardPlay,
+                                ))
+                                .await;
+                        }
 
                         _ => {}
                     }
