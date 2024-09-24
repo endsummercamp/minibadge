@@ -83,10 +83,10 @@ cargo run -q -- -s /dev/ttyACM0  send-nec --address 7 --command 22
 
 ## More examples
 
-Random solid color:
+Random solid, changing color:
 
 ```sh
-while true ; do red=$((1 + $RANDOM % 128)) ; green=$((1 + $RANDOM % 128)) ; blue=$((1 + $RANDOM % 128)) ; hred=$(printf "%#04x" $red) ; hgreen=$(printf "%#04x" $green) ; hblue=$(printf "%#04x" $blue) ; hred=${hred:2:2} ; hgreen=${hgreen:2:2} ; hblue=${hblue:2:2} ; cargo run -q -- --solid-color "#$hred$hgreen$hblue" ; sleep 0 ; done
+while true ; do red=$((1 + $RANDOM % 128)) ; green=$((1 + $RANDOM % 128)) ; blue=$((1 + $RANDOM % 128)) ; hred=$(printf "%#04x" $red) ; hgreen=$(printf "%#04x" $green) ; hblue=$(printf "%#04x" $blue) ; hred=${hred:2:2} ; hgreen=${hgreen:2:2} ; hblue=${hblue:2:2} ; cargo run -q -- --solid-color "#$hred$hgreen$hblue" ; sleep 0.1 ; done
 ```
 
 Random colors:
@@ -103,4 +103,28 @@ led=() ; frameBuffer="" ; for i in {1..9} ; do ledSingle="#" ; for j in {0..2} ;
 Random color, scrolling (not so noticeable):
 ```sh
 pause=0.5 ; led=() ; frameBuffer="" ; for i in {1..9} ; do ledSingle="#" ; for j in {0..2} ; do color=$((1 + $RANDOM % 255)) ; hcolor=$(printf "%#04x" $color) ; hcolor=${hcolor:2:2} ; ledSingle+=$hcolor ; done ; led+=($ledSingle) ; if [[ $i -lt 8 ]] ; then frameBuffer+=" #" ; fi ; done ; cargo run -q -- --frame-buffer "${led[1]} ${led[2]} ${led[3]} ${led[4]} ${led[5]} ${led[6]} ${led[7]} ${led[8]} ${led[9]}" ; while true ; do old=1 ; new=2 ; for i in {0..7} ; do led[$old]=${led[$new]} ; old=$new ; new=$((new+1)) ; done ; led[9]="" ; ledSingle="#" ; for j in {0..2} ; do color=$((1 + $RANDOM % 255)) ; hcolor=$(printf "%#04x" $color) ; hcolor=${hcolor:2:2} ; ledSingle+=$hcolor ; done ; led[9]=($ledSingle) ; sleep $pause ; cargo run -q -- --frame-buffer "${led[1]} ${led[2]} ${led[3]} ${led[4]} ${led[5]} ${led[6]} ${led[7]} ${led[8]} ${led[9]}" ; done
+```
+
+The random color traveler LED:
+```sh
+while true ; do
+ledSingle="#" ; for j in {0..2} ; do color=$((1 + $RANDOM % 255)) ; hcolor=$(printf "%#04x" $color) ; hcolor=${hcolor:2:2} ; ledSingle+=$hcolor ; done
+cargo run -q -- --frame-buffer "$ledSingle #000000 #000000 #000000 #000000 #000000 #000000 #000000 #000000"
+cargo run -q -- --frame-buffer "#000000 $ledSingle #000000 #000000 #000000 #000000 #000000 #000000 #000000"
+cargo run -q -- --frame-buffer "#000000 #000000 $ledSingle #000000 #000000 #000000 #000000 #000000 #000000"
+cargo run -q -- --frame-buffer "#000000 #000000 #000000 #000000 #000000 $ledSingle #000000 #000000 #000000"
+cargo run -q -- --frame-buffer "#000000 #000000 #000000 #000000 #000000 #000000 #000000 #000000 $ledSingle"
+cargo run -q -- --frame-buffer "#000000 #000000 #000000 #000000 #000000 #000000 #000000 $ledSingle #000000"
+cargo run -q -- --frame-buffer "#000000 #000000 #000000 #000000 #000000 #000000 $ledSingle #000000 #000000"
+cargo run -q -- --frame-buffer "#000000 #000000 #000000 $ledSingle #000000 #000000 #000000 #000000 #000000"
+cargo run -q -- --frame-buffer "#000000 #000000 #000000 #000000 $ledSingle #000000 #000000 #000000 #000000"
+cargo run -q -- --frame-buffer "#000000 #000000 #000000 $ledSingle #000000 #000000 #000000 #000000 #000000"
+cargo run -q -- --frame-buffer "#000000 #000000 #000000 #000000 #000000 #000000 $ledSingle #000000 #000000"
+cargo run -q -- --frame-buffer "#000000 #000000 #000000 #000000 #000000 #000000 #000000 $ledSingle #000000"
+cargo run -q -- --frame-buffer "#000000 #000000 #000000 #000000 #000000 #000000 #000000 #000000 $ledSingle"
+cargo run -q -- --frame-buffer "#000000 #000000 #000000 #000000 #000000 $ledSingle #000000 #000000 #000000"
+cargo run -q -- --frame-buffer "#000000 #000000 $ledSingle #000000 #000000 #000000 #000000 #000000 #000000"
+cargo run -q -- --frame-buffer "#000000 $ledSingle #000000 #000000 #000000 #000000 #000000 #000000 #000000"
+cargo run -q -- --frame-buffer "$ledSingle #000000 #000000 #000000 #000000 #000000 #000000 #000000 #000000"
+done
 ```
