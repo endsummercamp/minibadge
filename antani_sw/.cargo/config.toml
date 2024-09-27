@@ -21,3 +21,4 @@ target = "thumbv6m-none-eabi"
 
 [env]
 DEFMT_LOG = "debug"
+EMBASSY_USB_MAX_INTERFACE_COUNT="9"
