@@ -41,6 +41,9 @@ The badge emits different light effects. Gently press the USER key to select the
 10. gigaBlue
 11. gigaWhite (torch)
 12. under arrest
+13. dice 
+14. "ESC"
+15. alphabet
 13. leds off
 
 ## Project Structure

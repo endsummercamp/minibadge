@@ -14,6 +14,7 @@ pub struct Patterns {
     pub vertical_stripe_2: LedPattern,
     pub vertical_stripe_3: LedPattern,
     pub dice: &'static [LedPattern],
+    pub font: &'static [LedPattern],
     pub everything_once: &'static [LedPattern],
     pub boot_animation: &'static [LedPattern],
 }
@@ -38,6 +39,35 @@ pub static PATTERNS: LazyLock<Patterns> = LazyLock::new(|| Patterns {
         0b101000101,
         0b101010101,
         0b101101101,
+    ],
+
+    font: &[
+        0b010111101, // 'A'
+        0b110111111,
+        0b011100111,
+        0b110101110,
+        0b111110111,
+        0b111110100,
+        0b110101111,
+        0b101111101,
+        0b111010111,
+        0b111010110,
+        0b101110101,
+        0b100100111,
+        0b111111101,
+        0b111101101,
+        0b111101111,
+        0b111111100,
+        0b111101110,
+        0b110111101,
+        0b011010110,
+        0b111010010,
+        0b101101111,
+        0b101101010,
+        0b101111111,
+        0b101010101,
+        0b101010010,
+        0b110010011, // 'Z'
     ],
 
     everything_once: &[
@@ -188,6 +218,20 @@ pub fn scenes() -> Scenes {
         Vec::from_slice(&[RenderCommand {
             effect: Pattern::Animation(patterns.dice, 0.5),
             color: ColorPalette::Solid((255, 0, 0).into()),
+            ..Default::default()
+        }])
+        .unwrap(),
+        // "ESC"
+        Vec::from_slice(&[RenderCommand {
+            effect: Pattern::Text("ESC ", 2.0),
+            color: ColorPalette::Rainbow(0.5),
+            ..Default::default()
+        }])
+        .unwrap(),
+        // alphabet
+        Vec::from_slice(&[RenderCommand {
+            effect: Pattern::Animation(patterns.font, 2.0),
+            color: ColorPalette::Rainbow(0.5),
             ..Default::default()
         }])
         .unwrap(),

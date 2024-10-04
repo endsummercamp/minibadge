@@ -3,7 +3,7 @@ use heapless::Vec;
 use num_traits::real::Real;
 use rand::{rngs::SmallRng, Rng};
 
-use crate::{LedMatrix, LedPixel, RawFramebuffer};
+use crate::{scenes::PATTERNS, LedMatrix, LedPixel, RawFramebuffer};
 
 pub type LedPattern = u16;
 
@@ -210,9 +210,10 @@ impl ColorPalette {
 #[derive(Clone, Debug)]
 pub enum Pattern {
     Simple(LedPattern),
-    Animation(&'static [LedPattern], f32), // pattern, speed
+    Text(&'static str, f32),                      // text, speed
+    Animation(&'static [LedPattern], f32),        // pattern, speed
     AnimationReverse(&'static [LedPattern], f32), // pattern, speed
-    AnimationRandom(&'static [LedPattern], u16), // pattern, decimation
+    AnimationRandom(&'static [LedPattern], u16),  // pattern, decimation
 }
 
 impl Default for Pattern {
@@ -225,6 +226,14 @@ impl Pattern {
     fn render(&self, t: f64, renderman: &mut RenderManager) -> LedPattern {
         match self {
             Pattern::Simple(pattern) => *pattern,
+            Pattern::Text(text, speed) => {
+                let idx = (t * *speed as f64) as usize % text.len();
+                let char = text.as_bytes()[idx] as char;
+                let char = char.to_ascii_uppercase();
+                let index = char as usize - 'A' as usize;
+                let pattern = PATTERNS.get().font.get(index).unwrap_or(&0);
+                *pattern
+            }
             Pattern::Animation(pattern, speed) => {
                 let idx = (t * *speed as f64) as usize % pattern.len();
                 let pattern = &pattern[idx];
