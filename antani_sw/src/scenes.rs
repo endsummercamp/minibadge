@@ -13,6 +13,7 @@ pub struct Patterns {
     pub vertical_stripe_1: LedPattern,
     pub vertical_stripe_2: LedPattern,
     pub vertical_stripe_3: LedPattern,
+    pub dice: &'static [LedPattern],
     pub everything_once: &'static [LedPattern],
     pub boot_animation: &'static [LedPattern],
 }
@@ -29,6 +30,15 @@ pub static PATTERNS: LazyLock<Patterns> = LazyLock::new(|| Patterns {
     vertical_stripe_1: 0b100100100,
     vertical_stripe_2: 0b010010010,
     vertical_stripe_3: 0b001001001,
+
+    dice: &[
+        0b000010000,
+        0b100000001,
+        0b100010001,
+        0b101000101,
+        0b101010101,
+        0b101101101,
+    ],
 
     everything_once: &[
         0b100000000,
@@ -171,6 +181,13 @@ pub fn scenes() -> Scenes {
                 .unwrap(),
                 15.0,
             ),
+            ..Default::default()
+        }])
+        .unwrap(),
+        // dice
+        Vec::from_slice(&[RenderCommand {
+            effect: Pattern::Animation(patterns.dice, 0.5),
+            color: ColorPalette::Solid((255, 0, 0).into()),
             ..Default::default()
         }])
         .unwrap(),
